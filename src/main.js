@@ -3,6 +3,8 @@ import './styles.css';
 const key = 'hxwl-14-music-practice';
 const planKey = 'hxwl-14-music-practice-plan';
 const goalKey = 'hxwl-14-music-practice-goals';
+const sessionKey = 'hxwl-14-practice-session';
+const committedSessionsKey = 'hxwl-14-committed-sessions';
 const seed = [
   { id: crypto.randomUUID(), instrument: '电吉他', piece: 'Blue Bossa', date: '2026-06-01', bpm: 86, minutes: 35, mistakes: 18, note: '和弦转换卡顿', sections: [
     { id: crypto.randomUUID(), name: '前奏', bpm: 80, mistakes: 3, mastery: 3, note: '分解和弦流畅度不够' },
@@ -33,6 +35,20 @@ let editingId = null;
 let archiveFilter = '';
 let currentSections = [];
 
+let session = JSON.parse(localStorage.getItem(sessionKey) || 'null') || {
+  id: null,
+  status: 'idle',
+  startTime: null,
+  accumulatedMs: 0,
+  instrument: '',
+  piece: '',
+  targetBpm: '',
+  note: '',
+  createdAt: null
+};
+let committedSessionIds = JSON.parse(localStorage.getItem(committedSessionsKey) || '[]');
+let sessionTimer = null;
+
 const defaultSectionNames = ['前奏', '主歌', '副歌', 'Solo', '桥段', '尾奏'];
 
 function getToday() {
@@ -51,6 +67,261 @@ function getMasteryLabel(mastery) {
 function getMasteryColor(mastery) {
   const colors = { 1: '#dc2626', 2: '#d97706', 3: '#0891b2', 4: '#0d9488', 5: '#059669' };
   return colors[mastery] || '#60736f';
+}
+
+function saveSession() {
+  localStorage.setItem(sessionKey, JSON.stringify(session));
+}
+
+function saveCommittedSessions() {
+  localStorage.setItem(committedSessionsKey, JSON.stringify(committedSessionIds));
+}
+
+function getSessionElapsedMs() {
+  if (session.status === 'idle') return 0;
+  let elapsed = session.accumulatedMs;
+  if (session.status === 'running' && session.startTime) {
+    elapsed += Date.now() - session.startTime;
+  }
+  return elapsed;
+}
+
+function formatDuration(ms) {
+  const totalSeconds = Math.floor(ms / 1000);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  if (hours > 0) {
+    return `${hours}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+  }
+  return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+}
+
+function startSession() {
+  const sessionForm = document.querySelector('#sessionForm');
+  const data = Object.fromEntries(new FormData(sessionForm).entries());
+  
+  if (!data.instrument.trim() || !data.piece.trim()) {
+    alert('请填写乐器和曲目');
+    return;
+  }
+
+  session = {
+    id: crypto.randomUUID(),
+    status: 'running',
+    startTime: Date.now(),
+    accumulatedMs: 0,
+    instrument: data.instrument.trim(),
+    piece: data.piece.trim(),
+    targetBpm: data.targetBpm ? Number(data.targetBpm) : null,
+    note: data.note ? data.note.trim() : '',
+    createdAt: Date.now()
+  };
+  saveSession();
+  startSessionTimer();
+  renderSessionPanel();
+}
+
+function pauseSession() {
+  if (session.status !== 'running') return;
+  session.accumulatedMs += Date.now() - session.startTime;
+  session.startTime = null;
+  session.status = 'paused';
+  saveSession();
+  stopSessionTimer();
+  renderSessionPanel();
+}
+
+function resumeSession() {
+  if (session.status !== 'paused') return;
+  session.startTime = Date.now();
+  session.status = 'running';
+  saveSession();
+  startSessionTimer();
+  renderSessionPanel();
+}
+
+function endSession() {
+  if (session.status === 'idle') return;
+  
+  if (committedSessionIds.includes(session.id)) {
+    alert('该会话已保存过记录，请勿重复提交');
+    return;
+  }
+
+  const elapsedMs = getSessionElapsedMs();
+  const minutes = Math.max(1, Math.round(elapsedMs / 60000));
+
+  if (!confirm(`本次练习时长 ${minutes} 分钟，确定结束并生成记录？`)) return;
+
+  const item = {
+    id: crypto.randomUUID(),
+    instrument: session.instrument,
+    piece: session.piece,
+    date: getToday(),
+    bpm: session.targetBpm || 60,
+    minutes: minutes,
+    mistakes: 0,
+    note: session.note || `计时练习，实际时长 ${formatDuration(elapsedMs)}`
+  };
+
+  records = [item, ...records];
+  committedSessionIds.push(session.id);
+  saveCommittedSessions();
+  save();
+
+  session = {
+    id: null,
+    status: 'idle',
+    startTime: null,
+    accumulatedMs: 0,
+    instrument: '',
+    piece: '',
+    targetBpm: '',
+    note: '',
+    createdAt: null
+  };
+  saveSession();
+  stopSessionTimer();
+  renderSessionPanel();
+  render();
+}
+
+function cancelSession() {
+  if (session.status === 'idle') return;
+  if (!confirm('确定取消本次练习？计时数据将不会被保存。')) return;
+  
+  session = {
+    id: null,
+    status: 'idle',
+    startTime: null,
+    accumulatedMs: 0,
+    instrument: '',
+    piece: '',
+    targetBpm: '',
+    note: '',
+    createdAt: null
+  };
+  saveSession();
+  stopSessionTimer();
+  renderSessionPanel();
+}
+
+function startSessionTimer() {
+  stopSessionTimer();
+  sessionTimer = setInterval(() => {
+    const timerDisplay = document.querySelector('#sessionTimer');
+    if (timerDisplay) {
+      timerDisplay.textContent = formatDuration(getSessionElapsedMs());
+    }
+  }, 1000);
+}
+
+function stopSessionTimer() {
+  if (sessionTimer) {
+    clearInterval(sessionTimer);
+    sessionTimer = null;
+  }
+}
+
+function renderSessionPanel() {
+  const panel = document.querySelector('#sessionPanel');
+  if (!panel) return;
+
+  const pieces = [...new Set(records.map((record) => record.piece))].sort();
+  const instruments = [...new Set(records.map((record) => record.instrument))].sort();
+
+  if (session.status === 'idle') {
+    panel.innerHTML = `
+      <div class="panelHead">
+        <h2>练习会话计时</h2>
+        <span class="muted">开始新的练习</span>
+      </div>
+      <form id="sessionForm" class="sessionForm">
+        <div class="pair">
+          <select name="instrument" required>
+            <option value="">选择乐器</option>
+            ${instruments.map(i => `<option value="${escapeHtml(i)}">${escapeHtml(i)}</option>`).join('')}
+            <option value="其他">其他</option>
+          </select>
+          <input name="piece" list="pieceSuggestions" placeholder="曲目" required />
+          <datalist id="pieceSuggestions">
+            ${pieces.map(p => `<option value="${escapeHtml(p)}">`).join('')}
+          </datalist>
+        </div>
+        <div class="pair">
+          <input name="targetBpm" type="number" min="1" step="1" placeholder="目标BPM" />
+          <input name="note" placeholder="备注（可选）" />
+        </div>
+        <button type="button" class="primary" id="startSessionBtn">▶ 开始练习</button>
+      </form>
+    `;
+
+    document.querySelector('#startSessionBtn').addEventListener('click', startSession);
+  } else {
+    const elapsed = getSessionElapsedMs();
+    const isRunning = session.status === 'running';
+    
+    panel.innerHTML = `
+      <div class="panelHead">
+        <h2>练习会话计时</h2>
+        <span class="sessionStatus ${session.status}">${isRunning ? '● 进行中' : '❚❚ 已暂停'}</span>
+      </div>
+      <div class="sessionActive">
+        <div class="sessionInfo">
+          <div class="sessionInfoRow">
+            <span class="sessionLabel">曲目</span>
+            <strong>${escapeHtml(session.piece)}</strong>
+          </div>
+          <div class="sessionInfoRow">
+            <span class="sessionLabel">乐器</span>
+            <strong>${escapeHtml(session.instrument)}</strong>
+          </div>
+          ${session.targetBpm ? `
+          <div class="sessionInfoRow">
+            <span class="sessionLabel">目标BPM</span>
+            <strong>${session.targetBpm}</strong>
+          </div>
+          ` : ''}
+          ${session.note ? `
+          <div class="sessionInfoRow">
+            <span class="sessionLabel">备注</span>
+            <strong>${escapeHtml(session.note)}</strong>
+          </div>
+          ` : ''}
+        </div>
+        <div class="sessionTimer">
+          <div id="sessionTimer" class="timerDisplay">${formatDuration(elapsed)}</div>
+          <div class="timerHint">已练习 ${Math.round(elapsed / 60000)} 分钟</div>
+        </div>
+        <div class="sessionActions">
+          ${isRunning 
+            ? `<button class="secondary" id="pauseSessionBtn">❚❚ 暂停</button>`
+            : `<button class="primary" id="resumeSessionBtn">▶ 继续</button>`
+          }
+          <button class="primary" id="endSessionBtn">■ 结束并保存</button>
+          <button class="secondary" id="cancelSessionBtn">取消</button>
+        </div>
+      </div>
+    `;
+
+    const pauseBtn = document.querySelector('#pauseSessionBtn');
+    const resumeBtn = document.querySelector('#resumeSessionBtn');
+    const endBtn = document.querySelector('#endSessionBtn');
+    const cancelBtn = document.querySelector('#cancelSessionBtn');
+
+    if (pauseBtn) pauseBtn.addEventListener('click', pauseSession);
+    if (resumeBtn) resumeBtn.addEventListener('click', resumeSession);
+    if (endBtn) endBtn.addEventListener('click', endSession);
+    if (cancelBtn) cancelBtn.addEventListener('click', cancelSession);
+  }
+}
+
+function initSession() {
+  if (session.status === 'running') {
+    startSessionTimer();
+  }
+  renderSessionPanel();
 }
 
 function getSections(record) {
@@ -320,6 +591,8 @@ document.querySelector('#app').innerHTML = `
         </div>
       </div>
     </div>
+
+    <section class="panel sessionPanel" id="sessionPanel"></section>
 
     <section class="panel planPanel">
       <div class="panelHead">
@@ -909,6 +1182,7 @@ function save() {
 
 function render() {
   syncGoalAchievements();
+  renderSessionPanel();
   const selectedPiece = pieceFilter.value;
   const pieces = [...new Set(records.map((record) => record.piece))].sort();
   pieceFilter.innerHTML = `<option value="">全部曲目</option>${pieces.map((piece) => `<option value="${escapeHtml(piece)}">${escapeHtml(piece)}</option>`).join('')}`;
@@ -1412,4 +1686,5 @@ function drawBars(selector, data, unit, color) {
   el.innerHTML = `<svg viewBox="0 0 500 220">${data.map((item, index) => `<rect x="${48 + index * 86}" y="${180 - (item.value / max) * 140}" width="34" height="${(item.value / max) * 140}" rx="5" fill="${color}"/><text x="${65 + index * 86}" y="${168 - (item.value / max) * 140}">${item.value}${unit}</text><text x="${65 + index * 86}" y="205">${item.label}</text>`).join('')}</svg>`;
 }
 
+initSession();
 render();
