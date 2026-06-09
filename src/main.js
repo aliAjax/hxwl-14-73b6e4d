@@ -141,8 +141,30 @@ document.querySelector('#app').innerHTML = `
         <p>hxwl-14 · port 5114</p>
         <h1>独立音乐练习仪表盘</h1>
       </div>
-      <button id="sample">载入示例</button>
+      <div class="heroButtons">
+        <button id="sample">载入示例</button>
+        <button id="exportBtn" class="secondary">导出数据</button>
+        <button id="importBtn" class="secondary">导入数据</button>
+        <input type="file" id="importFile" accept=".json" hidden />
+      </div>
     </header>
+
+    <div id="importModal" class="modal" hidden>
+      <div class="modalOverlay"></div>
+      <div class="modalContent">
+        <div class="modalHead">
+          <h2>导入练习记录</h2>
+          <button class="modalClose" id="modalClose">×</button>
+        </div>
+        <div class="modalBody">
+          <div id="importPreview"></div>
+        </div>
+        <div class="modalFoot">
+          <button class="modalCancel" id="modalCancel">取消</button>
+          <button class="primary modalConfirm" id="modalConfirm" disabled>确认导入</button>
+        </div>
+      </div>
+    </div>
 
     <section class="panel planPanel">
       <div class="panelHead">
@@ -296,6 +318,343 @@ document.querySelector('#sample').addEventListener('click', () => {
   records = seed;
   save();
   render();
+});
+
+let pendingImportData = null;
+
+const exportBtn = document.querySelector('#exportBtn');
+const importBtn = document.querySelector('#importBtn');
+const importFile = document.querySelector('#importFile');
+const importModal = document.querySelector('#importModal');
+const importPreview = document.querySelector('#importPreview');
+const modalClose = document.querySelector('#modalClose');
+const modalCancel = document.querySelector('#modalCancel');
+const modalConfirm = document.querySelector('#modalConfirm');
+
+function exportData() {
+  const data = {
+    exportedAt: new Date().toISOString(),
+    version: '1.0',
+    records: records
+  };
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `music-practice-${getToday()}.json`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function validateRecord(record, index) {
+  const errors = [];
+  const requiredFields = ['instrument', 'piece', 'date', 'bpm', 'minutes', 'mistakes'];
+  const numberFields = ['bpm', 'minutes', 'mistakes'];
+
+  if (typeof record !== 'object' || record === null || Array.isArray(record)) {
+    return { valid: false, errors: [`第 ${index + 1} 条记录不是有效的对象`] };
+  }
+
+  for (const field of requiredFields) {
+    if (record[field] === undefined || record[field] === null || record[field] === '') {
+      errors.push(`缺少必填字段: ${field}`);
+    }
+  }
+
+  for (const field of numberFields) {
+    if (record[field] !== undefined && record[field] !== null) {
+      const num = Number(record[field]);
+      if (isNaN(num)) {
+        errors.push(`字段 ${field} 必须是数字`);
+      } else if (field === 'minutes' && num < 1) {
+        errors.push(`字段 ${field} 必须大于 0`);
+      } else if (field === 'mistakes' && num < 0) {
+        errors.push(`字段 ${field} 不能为负数`);
+      } else if (field === 'bpm' && num < 1) {
+        errors.push(`字段 ${field} 必须大于 0`);
+      }
+    }
+  }
+
+  if (record.date && !/^\d{4}-\d{2}-\d{2}$/.test(record.date)) {
+    errors.push('日期格式必须为 YYYY-MM-DD');
+  }
+
+  return {
+    valid: errors.length === 0,
+    errors: errors.map(e => `第 ${index + 1} 条: ${e}`)
+  };
+}
+
+function isDuplicate(record, existingRecords) {
+  return existingRecords.some(r =>
+    r.instrument === record.instrument &&
+    r.piece === record.piece &&
+    r.date === record.date &&
+    r.bpm === Number(record.bpm) &&
+    r.minutes === Number(record.minutes) &&
+    r.mistakes === Number(record.mistakes)
+  );
+}
+
+function parseImportFile(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const content = e.target.result;
+        const parsed = JSON.parse(content);
+        resolve(parsed);
+      } catch (err) {
+        reject(new Error('JSON 解析失败，请检查文件格式'));
+      }
+    };
+    reader.onerror = () => reject(new Error('文件读取失败'));
+    reader.readAsText(file);
+  });
+}
+
+function processImportData(parsedData) {
+  const result = {
+    newRecords: [],
+    duplicateRecords: [],
+    invalidRecords: [],
+    allErrors: []
+  };
+
+  let importRecords = [];
+
+  if (Array.isArray(parsedData)) {
+    importRecords = parsedData;
+  } else if (parsedData && Array.isArray(parsedData.records)) {
+    importRecords = parsedData.records;
+  } else {
+    throw new Error('无法识别的文件格式，请确保文件包含 records 数组或本身就是记录数组');
+  }
+
+  if (importRecords.length === 0) {
+    throw new Error('文件中没有找到任何练习记录');
+  }
+
+  importRecords.forEach((record, index) => {
+    const validation = validateRecord(record, index);
+
+    if (!validation.valid) {
+      result.invalidRecords.push({ record, index });
+      result.allErrors.push(...validation.errors);
+      return;
+    }
+
+    const normalizedRecord = {
+      id: crypto.randomUUID(),
+      instrument: String(record.instrument).trim(),
+      piece: String(record.piece).trim(),
+      date: String(record.date).trim(),
+      bpm: Number(record.bpm),
+      minutes: Number(record.minutes),
+      mistakes: Number(record.mistakes),
+      note: record.note ? String(record.note).trim() : ''
+    };
+
+    if (isDuplicate(normalizedRecord, records)) {
+      result.duplicateRecords.push({ record: normalizedRecord, index });
+    } else {
+      result.newRecords.push({ record: normalizedRecord, index });
+    }
+  });
+
+  return result;
+}
+
+function renderImportPreview(result) {
+  const { newRecords, duplicateRecords, invalidRecords, allErrors } = result;
+  const total = newRecords.length + duplicateRecords.length + invalidRecords.length;
+
+  let html = '';
+
+  html += `
+    <div class="importSummary">
+      <div class="summaryItem new">
+        <span class="summaryCount">${newRecords.length}</span>
+        <span class="summaryLabel">新增记录</span>
+      </div>
+      <div class="summaryItem duplicate">
+        <span class="summaryCount">${duplicateRecords.length}</span>
+        <span class="summaryLabel">重复记录</span>
+      </div>
+      <div class="summaryItem invalid">
+        <span class="summaryCount">${invalidRecords.length}</span>
+        <span class="summaryLabel">格式错误</span>
+      </div>
+    </div>
+  `;
+
+  if (allErrors.length > 0) {
+    html += `
+      <div class="importSection errors">
+        <h3>❌ 格式错误 (${invalidRecords.length})</h3>
+        <ul class="errorList">
+          ${allErrors.map(e => `<li>${e}</li>`).join('')}
+        </ul>
+      </div>
+    `;
+  }
+
+  if (duplicateRecords.length > 0) {
+    html += `
+      <div class="importSection duplicates">
+        <h3>⚠️ 重复记录 (${duplicateRecords.length}) - 这些记录将被跳过</h3>
+        <div class="tableWrap">
+          <table class="previewTable">
+            <thead>
+              <tr>
+                <th>序号</th>
+                <th>日期</th>
+                <th>乐器</th>
+                <th>曲目</th>
+                <th>BPM</th>
+                <th>时长</th>
+                <th>错误</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${duplicateRecords.map(({ record, index }) => `
+                <tr class="duplicateRow">
+                  <td>${index + 1}</td>
+                  <td>${record.date}</td>
+                  <td>${record.instrument}</td>
+                  <td>${record.piece}</td>
+                  <td>${record.bpm}</td>
+                  <td>${record.minutes}min</td>
+                  <td>${record.mistakes}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    `;
+  }
+
+  if (newRecords.length > 0) {
+    html += `
+      <div class="importSection new">
+        <h3>✅ 新增记录 (${newRecords.length}) - 这些记录将被导入</h3>
+        <div class="tableWrap">
+          <table class="previewTable">
+            <thead>
+              <tr>
+                <th>序号</th>
+                <th>日期</th>
+                <th>乐器</th>
+                <th>曲目</th>
+                <th>BPM</th>
+                <th>时长</th>
+                <th>错误</th>
+                <th>备注</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${newRecords.map(({ record, index }) => `
+                <tr class="newRow">
+                  <td>${index + 1}</td>
+                  <td>${record.date}</td>
+                  <td>${record.instrument}</td>
+                  <td>${record.piece}</td>
+                  <td>${record.bpm}</td>
+                  <td>${record.minutes}min</td>
+                  <td>${record.mistakes}</td>
+                  <td>${record.note || '-'}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    `;
+  }
+
+  importPreview.innerHTML = html;
+
+  modalConfirm.disabled = newRecords.length === 0;
+  if (newRecords.length === 0) {
+    modalConfirm.textContent = '无有效数据可导入';
+  } else {
+    modalConfirm.textContent = `确认导入 ${newRecords.length} 条记录`;
+  }
+}
+
+function showImportError(message) {
+  importPreview.innerHTML = `
+    <div class="importError">
+      <h3>❌ 导入失败</h3>
+      <p>${message}</p>
+    </div>
+  `;
+  modalConfirm.disabled = true;
+  modalConfirm.textContent = '确认导入';
+}
+
+function openImportModal() {
+  importFile.value = '';
+  pendingImportData = null;
+  importPreview.innerHTML = `
+    <div class="importSelect">
+      <p>请选择要导入的 JSON 文件</p>
+      <button class="primary" id="selectFileBtn">选择文件</button>
+      <p class="muted">支持导出的 JSON 文件格式</p>
+    </div>
+  `;
+  modalConfirm.disabled = true;
+  modalConfirm.textContent = '确认导入';
+  importModal.hidden = false;
+
+  setTimeout(() => {
+    const selectFileBtn = document.querySelector('#selectFileBtn');
+    if (selectFileBtn) {
+      selectFileBtn.addEventListener('click', () => importFile.click());
+    }
+  }, 0);
+}
+
+function closeImportModal() {
+  importModal.hidden = true;
+  pendingImportData = null;
+}
+
+exportBtn.addEventListener('click', exportData);
+importBtn.addEventListener('click', openImportModal);
+modalClose.addEventListener('click', closeImportModal);
+modalCancel.addEventListener('click', closeImportModal);
+importModal.querySelector('.modalOverlay').addEventListener('click', closeImportModal);
+
+importFile.addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+
+  try {
+    const parsed = await parseImportFile(file);
+    const result = processImportData(parsed);
+    pendingImportData = result;
+    renderImportPreview(result);
+  } catch (err) {
+    showImportError(err.message);
+  }
+});
+
+modalConfirm.addEventListener('click', () => {
+  if (!pendingImportData || pendingImportData.newRecords.length === 0) return;
+
+  const newRecords = pendingImportData.newRecords.map(item => item.record);
+  records = [...newRecords, ...records];
+  save();
+  render();
+  closeImportModal();
+
+  const count = newRecords.length;
+  alert(`成功导入 ${count} 条练习记录！`);
 });
 
 function save() {

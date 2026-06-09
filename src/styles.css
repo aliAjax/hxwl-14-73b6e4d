@@ -31,6 +31,244 @@ h2, p { margin-top: 0; }
 }
 .hero button { background: white; color: #172522; }
 .primary { background: #0f766e; color: white; font-weight: 700; }
+.secondary {
+  background: rgba(255, 255, 255, 0.2);
+  color: white;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  transition: all 0.2s ease;
+}
+.secondary:hover {
+  background: rgba(255, 255, 255, 0.3);
+  border-color: rgba(255, 255, 255, 0.6);
+}
+.heroButtons {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.modal:not([hidden]) {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.modal[hidden] {
+  display: none;
+}
+.modalOverlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(23, 37, 34, 0.6);
+  backdrop-filter: blur(4px);
+}
+.modalContent {
+  position: relative;
+  background: white;
+  border-radius: 12px;
+  max-width: 900px;
+  width: 90%;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 24px 60px rgba(23, 37, 34, 0.3);
+  overflow: hidden;
+}
+.modalHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 24px;
+  border-bottom: 1px solid #e4efec;
+  flex-shrink: 0;
+}
+.modalHead h2 {
+  margin: 0;
+  font-size: 20px;
+  color: #172522;
+}
+.modalClose {
+  background: none;
+  border: none;
+  font-size: 28px;
+  line-height: 1;
+  color: #60736f;
+  cursor: pointer;
+  padding: 4px 10px;
+  border-radius: 6px;
+  transition: all 0.15s ease;
+}
+.modalClose:hover {
+  background: #f0f4f2;
+  color: #172522;
+}
+.modalBody {
+  padding: 20px 24px;
+  overflow-y: auto;
+  flex: 1;
+}
+.modalFoot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 16px 24px;
+  border-top: 1px solid #e4efec;
+  background: #fbfefc;
+  flex-shrink: 0;
+}
+.modalCancel {
+  background: #f0f4f2;
+  color: #172522;
+  border: 1px solid #cfe2de;
+  border-radius: 6px;
+  padding: 10px 20px;
+  font-weight: 600;
+  transition: all 0.15s ease;
+}
+.modalCancel:hover {
+  background: #e4efec;
+}
+.modalConfirm {
+  border-radius: 6px;
+  padding: 10px 20px;
+}
+.modalConfirm:disabled {
+  background: #c4d9d5;
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.importSelect {
+  text-align: center;
+  padding: 40px 20px;
+}
+.importSelect p {
+  color: #60736f;
+  margin-bottom: 16px;
+}
+.importSelect .primary {
+  padding: 12px 32px;
+  font-size: 15px;
+}
+
+.importSummary {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  margin-bottom: 24px;
+}
+.summaryItem {
+  text-align: center;
+  padding: 20px;
+  border-radius: 10px;
+  border: 2px solid;
+}
+.summaryItem.new {
+  background: #f0fdf4;
+  border-color: #86efac;
+  color: #166534;
+}
+.summaryItem.duplicate {
+  background: #fffbeb;
+  border-color: #fcd34d;
+  color: #92400e;
+}
+.summaryItem.invalid {
+  background: #fef2f2;
+  border-color: #fca5a5;
+  color: #991b1b;
+}
+.summaryCount {
+  display: block;
+  font-size: 36px;
+  font-weight: 700;
+  line-height: 1;
+  margin-bottom: 6px;
+}
+.summaryLabel {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.importSection {
+  margin-bottom: 24px;
+}
+.importSection h3 {
+  margin: 0 0 12px 0;
+  font-size: 16px;
+  color: #172522;
+}
+.importSection.errors h3 {
+  color: #991b1b;
+}
+.importSection.duplicates h3 {
+  color: #92400e;
+}
+.importSection.new h3 {
+  color: #166534;
+}
+
+.previewTable {
+  width: 100%;
+  min-width: 600px;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.previewTable th {
+  background: #f6faf8;
+  padding: 10px 12px;
+  text-align: left;
+  font-weight: 600;
+  color: #172522;
+  border-bottom: 2px solid #cfe2de;
+}
+.previewTable td {
+  padding: 8px 12px;
+  border-bottom: 1px solid #e4efec;
+}
+.previewTable tr:last-child td {
+  border-bottom: none;
+}
+.previewTable .duplicateRow {
+  background: #fffbeb;
+}
+.previewTable .newRow {
+  background: #f0fdf4;
+}
+
+.errorList {
+  margin: 0;
+  padding-left: 20px;
+  color: #991b1b;
+  font-size: 13px;
+}
+.errorList li {
+  margin-bottom: 4px;
+}
+
+.importError {
+  text-align: center;
+  padding: 40px 20px;
+  color: #991b1b;
+}
+.importError h3 {
+  margin: 0 0 12px 0;
+  font-size: 18px;
+}
+.importError p {
+  margin: 0;
+  color: #60736f;
+}
+
+@media (max-width: 900px) {
+  .heroButtons { width: 100%; justify-content: flex-start; }
+  .importSummary { grid-template-columns: 1fr; }
+  .modalContent { width: 95%; max-height: 90vh; }
+  .modalHead, .modalBody, .modalFoot { padding-left: 16px; padding-right: 16px; }
+}
 
 .layout {
   display: grid;
