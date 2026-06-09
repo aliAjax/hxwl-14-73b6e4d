@@ -468,6 +468,15 @@ function processImportData(parsedData) {
   return result;
 }
 
+function escapeHtml(value) {
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 function renderImportPreview(result) {
   const { newRecords, duplicateRecords, invalidRecords, allErrors } = result;
   const total = newRecords.length + duplicateRecords.length + invalidRecords.length;
@@ -496,7 +505,7 @@ function renderImportPreview(result) {
       <div class="importSection errors">
         <h3>❌ 格式错误 (${invalidRecords.length})</h3>
         <ul class="errorList">
-          ${allErrors.map(e => `<li>${e}</li>`).join('')}
+          ${allErrors.map(e => `<li>${escapeHtml(e)}</li>`).join('')}
         </ul>
       </div>
     `;
@@ -523,9 +532,9 @@ function renderImportPreview(result) {
               ${duplicateRecords.map(({ record, index }) => `
                 <tr class="duplicateRow">
                   <td>${index + 1}</td>
-                  <td>${record.date}</td>
-                  <td>${record.instrument}</td>
-                  <td>${record.piece}</td>
+                  <td>${escapeHtml(record.date)}</td>
+                  <td>${escapeHtml(record.instrument)}</td>
+                  <td>${escapeHtml(record.piece)}</td>
                   <td>${record.bpm}</td>
                   <td>${record.minutes}min</td>
                   <td>${record.mistakes}</td>
@@ -560,13 +569,13 @@ function renderImportPreview(result) {
               ${newRecords.map(({ record, index }) => `
                 <tr class="newRow">
                   <td>${index + 1}</td>
-                  <td>${record.date}</td>
-                  <td>${record.instrument}</td>
-                  <td>${record.piece}</td>
+                  <td>${escapeHtml(record.date)}</td>
+                  <td>${escapeHtml(record.instrument)}</td>
+                  <td>${escapeHtml(record.piece)}</td>
                   <td>${record.bpm}</td>
                   <td>${record.minutes}min</td>
                   <td>${record.mistakes}</td>
-                  <td>${record.note || '-'}</td>
+                  <td>${record.note ? escapeHtml(record.note) : '-'}</td>
                 </tr>
               `).join('')}
             </tbody>
@@ -590,7 +599,7 @@ function showImportError(message) {
   importPreview.innerHTML = `
     <div class="importError">
       <h3>❌ 导入失败</h3>
-      <p>${message}</p>
+      <p>${escapeHtml(message)}</p>
     </div>
   `;
   modalConfirm.disabled = true;
@@ -665,9 +674,9 @@ function render() {
   syncGoalAchievements();
   const selectedPiece = pieceFilter.value;
   const pieces = [...new Set(records.map((record) => record.piece))].sort();
-  pieceFilter.innerHTML = `<option value="">全部曲目</option>${pieces.map((piece) => `<option>${piece}</option>`).join('')}`;
+  pieceFilter.innerHTML = `<option value="">全部曲目</option>${pieces.map((piece) => `<option value="${escapeHtml(piece)}">${escapeHtml(piece)}</option>`).join('')}`;
   const goalPieceSelect = goalForm.querySelector('select[name="piece"]');
-  goalPieceSelect.innerHTML = `<option value="">选择曲目</option>${pieces.map((piece) => `<option>${piece}</option>`).join('')}`;
+  goalPieceSelect.innerHTML = `<option value="">选择曲目</option>${pieces.map((piece) => `<option value="${escapeHtml(piece)}">${escapeHtml(piece)}</option>`).join('')}`;
   if (archiveFilter) {
     pieceFilter.value = pieces.includes(archiveFilter) ? archiveFilter : '';
   } else {
@@ -693,7 +702,7 @@ function render() {
 
   const filterBadge = document.querySelector('#filterBadge');
   if (archiveFilter) {
-    filterBadge.innerHTML = `<span class="filterTag">筛选: ${archiveFilter} <button id="clearFilter" class="clearFilter">×</button></span>`;
+    filterBadge.innerHTML = `<span class="filterTag">筛选: ${escapeHtml(archiveFilter)} <button id="clearFilter" class="clearFilter">×</button></span>`;
     document.querySelector('#clearFilter').addEventListener('click', () => {
       archiveFilter = '';
       pieceFilter.value = '';
@@ -703,7 +712,7 @@ function render() {
     filterBadge.innerHTML = '';
   }
 
-  document.querySelector('#rows').innerHTML = filtered.slice().reverse().map((record) => `<tr><td>${record.date}</td><td>${record.instrument}</td><td>${record.piece}</td><td>${record.bpm}</td><td>${record.minutes}min</td><td>${record.mistakes}</td><td><button data-edit="${record.id}">编辑</button><button data-del="${record.id}">删除</button></td></tr>`).join('');
+  document.querySelector('#rows').innerHTML = filtered.slice().reverse().map((record) => `<tr><td>${escapeHtml(record.date)}</td><td>${escapeHtml(record.instrument)}</td><td>${escapeHtml(record.piece)}</td><td>${record.bpm}</td><td>${record.minutes}min</td><td>${record.mistakes}</td><td><button data-edit="${escapeHtml(record.id)}">编辑</button><button data-del="${escapeHtml(record.id)}">删除</button></td></tr>`).join('');
   document.querySelectorAll('[data-del]').forEach((button) => button.addEventListener('click', () => {
     records = records.filter((record) => record.id !== button.dataset.del);
     save();
@@ -739,13 +748,13 @@ function renderArchive() {
     const trendSvg = drawTrendLine(track.mistakes.sort((a, b) => a.date.localeCompare(b.date)), trendColor);
 
     return `
-      <article class="trackCard ${archiveFilter === track.piece ? 'active' : ''}" data-track="${track.piece}">
+      <article class="trackCard ${archiveFilter === track.piece ? 'active' : ''}" data-track="${escapeHtml(track.piece)}">
         <div class="trackHead">
           <div>
-            <h3 class="trackTitle">${track.piece}</h3>
-            <span class="trackInstrument">${track.instrument} · ${track.practiceCount} 次练习</span>
+            <h3 class="trackTitle">${escapeHtml(track.piece)}</h3>
+            <span class="trackInstrument">${escapeHtml(track.instrument)} · ${track.practiceCount} 次练习</span>
           </div>
-          <button class="trackFilterBtn" data-filter-track="${track.piece}">筛选记录</button>
+          <button class="trackFilterBtn" data-filter-track="${escapeHtml(track.piece)}">筛选记录</button>
         </div>
         <div class="trackStats">
           <div class="trackStat">
@@ -770,7 +779,7 @@ function renderArchive() {
           <div class="trackNotes">
             <div class="trackNotesTitle">练习备注</div>
             <ul class="trackNotesList">
-              ${track.notes.map((n) => `<li><span class="noteDate">${n.date}</span><span class="noteText">${n.note}</span></li>`).join('')}
+              ${track.notes.map((n) => `<li><span class="noteDate">${escapeHtml(n.date)}</span><span class="noteText">${escapeHtml(n.note)}</span></li>`).join('')}
             </ul>
           </div>
         ` : ''}
@@ -800,7 +809,7 @@ function renderPlan() {
         <span class="checkmark"></span>
       </label>
       <div class="taskContent">
-        <div class="taskPiece">${task.piece}</div>
+        <div class="taskPiece">${escapeHtml(task.piece)}</div>
         <div class="taskMeta">
           <span>目标 BPM: <strong>${task.targetBpm}</strong></span>
           <span>预计: <strong>${task.estimatedMinutes}min</strong></span>
@@ -855,7 +864,7 @@ function renderGoals() {
       <div class="goalCard ${statusClass}" data-id="${goal.id}">
         <div class="goalHead">
           <div>
-            <h3 class="goalPiece">${goal.piece}</h3>
+            <h3 class="goalPiece">${escapeHtml(goal.piece)}</h3>
             <div class="goalMeta">
               <span>目标 BPM: <strong>${goal.targetBpm}</strong></span>
               <span>截止: <strong>${goal.targetDate}</strong></span>
@@ -952,7 +961,7 @@ function renderGoalDashboard() {
         <strong>⚠ 逾期提醒</strong>
         <p>以下目标已逾期，请尽快完成：</p>
         <ul>
-          ${overdueGoals.map(g => `<li>${g.piece} - 目标 ${g.targetBpm} BPM (逾期 ${Math.abs(calculateGoalProgress(g).daysRemaining)} 天)</li>`).join('')}
+          ${overdueGoals.map(g => `<li>${escapeHtml(g.piece)} - 目标 ${g.targetBpm} BPM (逾期 ${Math.abs(calculateGoalProgress(g).daysRemaining)} 天)</li>`).join('')}
         </ul>
       </div>
     ` : ''}
@@ -961,7 +970,7 @@ function renderGoalDashboard() {
         <strong>🎉 可达成目标</strong>
         <p>以下目标BPM已达标，点击"标记达成"完成目标：</p>
         <ul>
-          ${activeGoals.filter(g => calculateGoalProgress(g).bpmProgress >= 100).map(g => `<li>${g.piece} - 当前 ${getMaxBpm(g.piece)} BPM ≥ 目标 ${g.targetBpm} BPM</li>`).join('')}
+          ${activeGoals.filter(g => calculateGoalProgress(g).bpmProgress >= 100).map(g => `<li>${escapeHtml(g.piece)} - 当前 ${getMaxBpm(g.piece)} BPM ≥ 目标 ${g.targetBpm} BPM</li>`).join('')}
         </ul>
       </div>
     ` : ''}
