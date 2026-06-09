@@ -4,16 +4,36 @@ const key = 'hxwl-14-music-practice';
 const planKey = 'hxwl-14-music-practice-plan';
 const goalKey = 'hxwl-14-music-practice-goals';
 const seed = [
-  { id: crypto.randomUUID(), instrument: '电吉他', piece: 'Blue Bossa', date: '2026-06-01', bpm: 86, minutes: 35, mistakes: 18, note: '和弦转换卡顿' },
-  { id: crypto.randomUUID(), instrument: '电吉他', piece: 'Blue Bossa', date: '2026-06-03', bpm: 92, minutes: 42, mistakes: 13, note: '副歌更稳定' },
-  { id: crypto.randomUUID(), instrument: '电吉他', piece: 'Blue Bossa', date: '2026-06-06', bpm: 98, minutes: 45, mistakes: 9, note: '开始合伴奏' },
+  { id: crypto.randomUUID(), instrument: '电吉他', piece: 'Blue Bossa', date: '2026-06-01', bpm: 86, minutes: 35, mistakes: 18, note: '和弦转换卡顿', sections: [
+    { id: crypto.randomUUID(), name: '前奏', bpm: 80, mistakes: 3, mastery: 3, note: '分解和弦流畅度不够' },
+    { id: crypto.randomUUID(), name: '主歌', bpm: 86, mistakes: 8, mastery: 2, note: '和弦转换卡顿明显' },
+    { id: crypto.randomUUID(), name: '副歌', bpm: 86, mistakes: 7, mastery: 2, note: '扫弦节奏不稳' }
+  ]},
+  { id: crypto.randomUUID(), instrument: '电吉他', piece: 'Blue Bossa', date: '2026-06-03', bpm: 92, minutes: 42, mistakes: 13, note: '副歌更稳定', sections: [
+    { id: crypto.randomUUID(), name: '前奏', bpm: 88, mistakes: 2, mastery: 4, note: '进步明显' },
+    { id: crypto.randomUUID(), name: '主歌', bpm: 92, mistakes: 6, mastery: 3, note: '转换更流畅' },
+    { id: crypto.randomUUID(), name: '副歌', bpm: 92, mistakes: 5, mastery: 3, note: '扫弦节奏改善' }
+  ]},
+  { id: crypto.randomUUID(), instrument: '电吉他', piece: 'Blue Bossa', date: '2026-06-06', bpm: 98, minutes: 45, mistakes: 9, note: '开始合伴奏', sections: [
+    { id: crypto.randomUUID(), name: '前奏', bpm: 98, mistakes: 1, mastery: 5, note: '已掌握' },
+    { id: crypto.randomUUID(), name: '主歌', bpm: 98, mistakes: 4, mastery: 4, note: '基本流畅' },
+    { id: crypto.randomUUID(), name: '副歌', bpm: 98, mistakes: 3, mastery: 4, note: '配合伴奏稳定' },
+    { id: crypto.randomUUID(), name: 'Solo', bpm: 95, mistakes: 1, mastery: 3, note: '开始练习即兴' }
+  ]},
   { id: crypto.randomUUID(), instrument: '键盘', piece: 'Autumn Leaves', date: '2026-06-02', bpm: 72, minutes: 30, mistakes: 21, note: '左手节奏不稳' },
-  { id: crypto.randomUUID(), instrument: '键盘', piece: 'Autumn Leaves', date: '2026-06-05', bpm: 78, minutes: 38, mistakes: 15, note: '分段练习有效' }
+  { id: crypto.randomUUID(), instrument: '键盘', piece: 'Autumn Leaves', date: '2026-06-05', bpm: 78, minutes: 38, mistakes: 15, note: '分段练习有效', sections: [
+    { id: crypto.randomUUID(), name: '前奏', bpm: 75, mistakes: 2, mastery: 4, note: '左手稳定' },
+    { id: crypto.randomUUID(), name: '主歌', bpm: 78, mistakes: 7, mastery: 3, note: '左手根音配合' },
+    { id: crypto.randomUUID(), name: '副歌', bpm: 78, mistakes: 6, mastery: 3, note: '和弦转换需加强' }
+  ]}
 ];
 
 let records = JSON.parse(localStorage.getItem(key) || 'null') || seed;
 let editingId = null;
 let archiveFilter = '';
+let currentSections = [];
+
+const defaultSectionNames = ['前奏', '主歌', '副歌', 'Solo', '桥段', '尾奏'];
 
 function getToday() {
   const now = new Date();
@@ -21,6 +41,141 @@ function getToday() {
   const month = String(now.getMonth() + 1).padStart(2, '0');
   const day = String(now.getDate()).padStart(2, '0');
   return `${year}-${month}-${day}`;
+}
+
+function getMasteryLabel(mastery) {
+  const labels = { 1: '初学', 2: '熟悉', 3: '掌握', 4: '熟练', 5: '精通' };
+  return labels[mastery] || '未知';
+}
+
+function getMasteryColor(mastery) {
+  const colors = { 1: '#dc2626', 2: '#d97706', 3: '#0891b2', 4: '#0d9488', 5: '#059669' };
+  return colors[mastery] || '#60736f';
+}
+
+function getSections(record) {
+  return record.sections && Array.isArray(record.sections) ? record.sections : [];
+}
+
+function addSection(name = '') {
+  currentSections.push({
+    id: crypto.randomUUID(),
+    name: name || '新片段',
+    bpm: form.elements.bpm ? Number(form.elements.bpm.value) : 80,
+    mistakes: 0,
+    mastery: 3,
+    note: ''
+  });
+  renderSections();
+}
+
+function removeSection(id) {
+  currentSections = currentSections.filter(s => s.id !== id);
+  renderSections();
+}
+
+function updateSection(id, field, value) {
+  const section = currentSections.find(s => s.id === id);
+  if (section) {
+    if (['bpm', 'mistakes', 'mastery'].includes(field)) {
+      section[field] = Number(value);
+    } else {
+      section[field] = value;
+    }
+  }
+}
+
+function renderSections() {
+  const listEl = document.querySelector('#sectionsList');
+  if (!currentSections.length) {
+    listEl.innerHTML = '<p class="empty sectionsEmpty">暂无片段，点击上方按钮添加练习片段</p>';
+    return;
+  }
+
+  listEl.innerHTML = currentSections.map((section, index) => `
+    <div class="sectionCard" data-section-id="${section.id}">
+      <div class="sectionHead">
+        <input class="sectionNameInput" type="text" value="${escapeHtml(section.name)}" data-section-field="name" data-section-id="${section.id}" placeholder="片段名称" />
+        <button type="button" class="sectionDelBtn" data-section-del="${section.id}" aria-label="删除片段">×</button>
+      </div>
+      <div class="sectionFields">
+        <div class="sectionField">
+          <label>BPM</label>
+          <input type="number" min="1" step="1" value="${section.bpm}" data-section-field="bpm" data-section-id="${section.id}" />
+        </div>
+        <div class="sectionField">
+          <label>错误次数</label>
+          <input type="number" min="0" step="1" value="${section.mistakes}" data-section-field="mistakes" data-section-id="${section.id}" />
+        </div>
+        <div class="sectionField">
+          <label>掌握程度</label>
+          <select data-section-field="mastery" data-section-id="${section.id}">
+            ${[1,2,3,4,5].map(m => `<option value="${m}" ${section.mastery === m ? 'selected' : ''}>${m} - ${getMasteryLabel(m)}</option>`).join('')}
+          </select>
+        </div>
+      </div>
+      <input class="sectionNoteInput" type="text" value="${escapeHtml(section.note)}" data-section-field="note" data-section-id="${section.id}" placeholder="片段备注..." />
+    </div>
+  `).join('');
+
+  listEl.querySelectorAll('[data-section-field]').forEach(input => {
+    input.addEventListener('input', (e) => {
+      updateSection(e.target.dataset.sectionId, e.target.dataset.sectionField, e.target.value);
+    });
+  });
+
+  listEl.querySelectorAll('[data-section-del]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      removeSection(btn.dataset.sectionDel);
+    });
+  });
+}
+
+function getSectionStats(trackRecords) {
+  const sectionMap = new Map();
+
+  trackRecords.forEach(record => {
+    const sections = getSections(record);
+    sections.forEach(section => {
+      if (!sectionMap.has(section.name)) {
+        sectionMap.set(section.name, {
+          name: section.name,
+          records: [],
+          bpmHistory: [],
+          mistakesHistory: [],
+          masteryHistory: []
+        });
+      }
+      const stats = sectionMap.get(section.name);
+      stats.records.push({ ...section, date: record.date });
+      stats.bpmHistory.push({ date: record.date, value: section.bpm });
+      stats.mistakesHistory.push({ date: record.date, value: section.mistakes });
+      stats.masteryHistory.push({ date: record.date, value: section.mastery });
+    });
+  });
+
+  return [...sectionMap.values()].map(section => {
+    const sortedBpm = section.bpmHistory.sort((a, b) => a.date.localeCompare(b.date));
+    const sortedMistakes = section.mistakesHistory.sort((a, b) => a.date.localeCompare(b.date));
+    const sortedMastery = section.masteryHistory.sort((a, b) => a.date.localeCompare(b.date));
+
+    const maxBpm = sortedBpm.length ? Math.max(...sortedBpm.map(h => h.value)) : 0;
+    const latestMastery = sortedMastery.length ? sortedMastery[sortedMastery.length - 1].value : 0;
+    const mistakeTrend = sortedMistakes.length >= 2
+      ? sortedMistakes[sortedMistakes.length - 1].value - sortedMistakes[0].value
+      : 0;
+
+    return {
+      ...section,
+      bpmHistory: sortedBpm,
+      mistakesHistory: sortedMistakes,
+      masteryHistory: sortedMastery,
+      maxBpm,
+      latestMastery,
+      mistakeTrend,
+      practiceCount: section.records.length
+    };
+  }).sort((a, b) => b.practiceCount - a.practiceCount);
 }
 
 function loadPlan() {
@@ -215,11 +370,22 @@ document.querySelector('#app').innerHTML = `
         <input name="piece" placeholder="曲目" required />
         <input name="date" type="date" required />
         <div class="pair">
-          <input name="bpm" type="number" min="1" step="1" placeholder="速度BPM" required />
+          <input name="bpm" type="number" min="1" step="1" placeholder="整体速度BPM" required />
           <input name="minutes" type="number" min="1" step="1" placeholder="练习时长min" required />
         </div>
-        <input name="mistakes" type="number" min="0" step="1" placeholder="错误次数" required />
-        <textarea name="note" placeholder="备注"></textarea>
+        <input name="mistakes" type="number" min="0" step="1" placeholder="整体错误次数" required />
+        <textarea name="note" placeholder="整体备注"></textarea>
+
+        <div class="sectionDivider">
+          <span>分段练习复盘</span>
+          <button type="button" id="addSectionBtn" class="secondary small">+ 添加片段</button>
+        </div>
+        <div id="sectionsList" class="sectionsList"></div>
+        <div id="sectionQuickAdd" class="sectionQuickAdd">
+          <span>快速添加：</span>
+          ${defaultSectionNames.map(name => `<button type="button" class="quickSectionBtn" data-name="${name}">${name}</button>`).join('')}
+        </div>
+
         <button class="primary">保存记录</button>
       </form>
 
@@ -302,13 +468,27 @@ goalForm.addEventListener('submit', (event) => {
 form.addEventListener('submit', (event) => {
   event.preventDefault();
   const data = Object.fromEntries(new FormData(form).entries());
-  const item = { ...data, bpm: Number(data.bpm), minutes: Number(data.minutes), mistakes: Number(data.mistakes), id: editingId || crypto.randomUUID() };
+  const item = {
+    ...data,
+    bpm: Number(data.bpm),
+    minutes: Number(data.minutes),
+    mistakes: Number(data.mistakes),
+    id: editingId || crypto.randomUUID(),
+    sections: currentSections.length ? [...currentSections] : undefined
+  };
   records = editingId ? records.map((record) => (record.id === editingId ? item : record)) : [item, ...records];
   editingId = null;
+  currentSections = [];
   form.reset();
   save();
   render();
 });
+document.querySelector('#addSectionBtn').addEventListener('click', () => addSection());
+
+document.querySelectorAll('.quickSectionBtn').forEach(btn => {
+  btn.addEventListener('click', () => addSection(btn.dataset.name));
+});
+
 search.addEventListener('input', render);
 pieceFilter.addEventListener('change', () => {
   archiveFilter = '';
@@ -348,6 +528,39 @@ function exportData() {
   URL.revokeObjectURL(url);
 }
 
+function validateSection(section, recordIndex, sectionIndex) {
+  const errors = [];
+  const requiredFields = ['name', 'bpm', 'mistakes', 'mastery'];
+  const numberFields = ['bpm', 'mistakes', 'mastery'];
+
+  if (typeof section !== 'object' || section === null || Array.isArray(section)) {
+    return { valid: false, errors: [`第 ${recordIndex + 1} 条记录的第 ${sectionIndex + 1} 个片段不是有效的对象`] };
+  }
+
+  for (const field of requiredFields) {
+    if (section[field] === undefined || section[field] === null || section[field] === '') {
+      errors.push(`第 ${recordIndex + 1} 条记录的第 ${sectionIndex + 1} 个片段缺少必填字段: ${field}`);
+    }
+  }
+
+  for (const field of numberFields) {
+    if (section[field] !== undefined && section[field] !== null) {
+      const num = Number(section[field]);
+      if (isNaN(num)) {
+        errors.push(`第 ${recordIndex + 1} 条记录的第 ${sectionIndex + 1} 个片段字段 ${field} 必须是数字`);
+      } else if (field === 'bpm' && num < 1) {
+        errors.push(`第 ${recordIndex + 1} 条记录的第 ${sectionIndex + 1} 个片段字段 ${field} 必须大于 0`);
+      } else if (field === 'mistakes' && num < 0) {
+        errors.push(`第 ${recordIndex + 1} 条记录的第 ${sectionIndex + 1} 个片段字段 ${field} 不能为负数`);
+      } else if (field === 'mastery' && (num < 1 || num > 5)) {
+        errors.push(`第 ${recordIndex + 1} 条记录的第 ${sectionIndex + 1} 个片段掌握程度必须在 1-5 之间`);
+      }
+    }
+  }
+
+  return { valid: errors.length === 0, errors };
+}
+
 function validateRecord(record, index) {
   const errors = [];
   const requiredFields = ['instrument', 'piece', 'date', 'bpm', 'minutes', 'mistakes'];
@@ -380,6 +593,19 @@ function validateRecord(record, index) {
 
   if (record.date && !/^\d{4}-\d{2}-\d{2}$/.test(record.date)) {
     errors.push('日期格式必须为 YYYY-MM-DD');
+  }
+
+  if (record.sections !== undefined && record.sections !== null) {
+    if (!Array.isArray(record.sections)) {
+      errors.push('sections 字段必须是数组');
+    } else {
+      record.sections.forEach((section, sectionIndex) => {
+        const sectionValidation = validateSection(section, index, sectionIndex);
+        if (!sectionValidation.valid) {
+          errors.push(...sectionValidation.errors);
+        }
+      });
+    }
   }
 
   return {
@@ -457,6 +683,17 @@ function processImportData(parsedData) {
       mistakes: Number(record.mistakes),
       note: record.note ? String(record.note).trim() : ''
     };
+
+    if (record.sections && Array.isArray(record.sections) && record.sections.length > 0) {
+      normalizedRecord.sections = record.sections.map(section => ({
+        id: crypto.randomUUID(),
+        name: String(section.name).trim(),
+        bpm: Number(section.bpm),
+        mistakes: Number(section.mistakes),
+        mastery: Number(section.mastery),
+        note: section.note ? String(section.note).trim() : ''
+      }));
+    }
 
     if (isDuplicate(normalizedRecord, records)) {
       result.duplicateRecords.push({ record: normalizedRecord, index });
@@ -682,6 +919,8 @@ function render() {
   } else {
     pieceFilter.value = selectedPiece && pieces.includes(selectedPiece) ? selectedPiece : '';
   }
+
+  renderSections();
   const effectivePieceFilter = archiveFilter || pieceFilter.value;
   const filtered = records
     .filter((record) => !effectivePieceFilter || record.piece === effectivePieceFilter)
@@ -712,18 +951,72 @@ function render() {
     filterBadge.innerHTML = '';
   }
 
-  document.querySelector('#rows').innerHTML = filtered.slice().reverse().map((record) => `<tr><td>${escapeHtml(record.date)}</td><td>${escapeHtml(record.instrument)}</td><td>${escapeHtml(record.piece)}</td><td>${record.bpm}</td><td>${record.minutes}min</td><td>${record.mistakes}</td><td><button data-edit="${escapeHtml(record.id)}">编辑</button><button data-del="${escapeHtml(record.id)}">删除</button></td></tr>`).join('');
+  document.querySelector('#rows').innerHTML = filtered.slice().reverse().map((record) => {
+    const sections = getSections(record);
+    return `
+      <tr>
+        <td>${escapeHtml(record.date)}</td>
+        <td>${escapeHtml(record.instrument)}</td>
+        <td>${escapeHtml(record.piece)}</td>
+        <td>${record.bpm}</td>
+        <td>${record.minutes}min</td>
+        <td>${record.mistakes}</td>
+        <td>
+          ${sections.length ? `<button data-sections="${escapeHtml(record.id)}" class="sectionViewBtn" title="查看片段">📋 ${sections.length}段</button>` : ''}
+          <button data-edit="${escapeHtml(record.id)}">编辑</button>
+          <button data-del="${escapeHtml(record.id)}">删除</button>
+        </td>
+      </tr>
+      ${sections.length ? `
+      <tr class="sectionDetailRow" data-section-detail="${escapeHtml(record.id)}" hidden>
+        <td colspan="7">
+          <div class="sectionDetail">
+            <div class="sectionDetailTitle">练习片段详情</div>
+            <div class="sectionDetailGrid">
+              ${sections.map(s => `
+                <div class="sectionDetailCard">
+                  <div class="sectionDetailHead">
+                    <strong>${escapeHtml(s.name)}</strong>
+                    <span class="masteryBadge" style="background: ${getMasteryColor(s.mastery)}">${getMasteryLabel(s.mastery)}</span>
+                  </div>
+                  <div class="sectionDetailStats">
+                    <span>BPM: <strong>${s.bpm}</strong></span>
+                    <span>错误: <strong>${s.mistakes}</strong>次</span>
+                  </div>
+                  ${s.note ? `<div class="sectionDetailNote">${escapeHtml(s.note)}</div>` : ''}
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        </td>
+      </tr>
+      ` : ''}
+    `;
+  }).join('');
+
   document.querySelectorAll('[data-del]').forEach((button) => button.addEventListener('click', () => {
     records = records.filter((record) => record.id !== button.dataset.del);
     save();
     render();
   }));
+
   document.querySelectorAll('[data-edit]').forEach((button) => button.addEventListener('click', () => {
     const record = records.find((item) => item.id === button.dataset.edit);
     editingId = record.id;
+    currentSections = getSections(record).map(s => ({ ...s }));
     Object.entries(record).forEach(([name, value]) => {
       if (form.elements[name]) form.elements[name].value = value;
     });
+    renderSections();
+    form.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }));
+
+  document.querySelectorAll('[data-sections]').forEach((button) => button.addEventListener('click', () => {
+    const detailRow = document.querySelector(`[data-section-detail="${button.dataset.sections}"]`);
+    if (detailRow) {
+      detailRow.hidden = !detailRow.hidden;
+      button.textContent = detailRow.hidden ? `📋 ${getSections(records.find(r => r.id === button.dataset.sections)).length}段` : '收起';
+    }
   }));
   renderPlan();
   renderArchive();
@@ -746,6 +1039,7 @@ function renderArchive() {
     const trendColor = track.mistakeTrend < 0 ? '#059669' : track.mistakeTrend > 0 ? '#dc2626' : '#60736f';
     const trendText = track.mistakeTrend < 0 ? `↓ ${Math.abs(track.mistakeTrend)}` : track.mistakeTrend > 0 ? `↑ ${track.mistakeTrend}` : '—';
     const trendSvg = drawTrendLine(track.mistakes.sort((a, b) => a.date.localeCompare(b.date)), trendColor);
+    const sectionStats = getSectionStats(track.records);
 
     return `
       <article class="trackCard ${archiveFilter === track.piece ? 'active' : ''}" data-track="${escapeHtml(track.piece)}">
@@ -775,6 +1069,58 @@ function renderArchive() {
             ${trendSvg}
           </div>
         </div>
+
+        ${sectionStats.length ? `
+          <div class="trackSections">
+            <div class="trackSectionsTitle">
+              <span>📊 片段进步趋势</span>
+              <span class="muted">${sectionStats.length} 个片段</span>
+            </div>
+            <div class="trackSectionsGrid">
+              ${sectionStats.map(section => {
+                const sectionTrendColor = section.mistakeTrend < 0 ? '#059669' : section.mistakeTrend > 0 ? '#dc2626' : '#60736f';
+                const sectionTrendText = section.mistakeTrend < 0 ? `↓ ${Math.abs(section.mistakeTrend)}` : section.mistakeTrend > 0 ? `↑ ${section.mistakeTrend}` : '—';
+                const bpmTrendSvg = drawMiniTrendLine(section.bpmHistory, '#0f766e');
+                const mistakeTrendSvg = drawMiniTrendLine(section.mistakesHistory, sectionTrendColor);
+                const masteryTrendSvg = drawMiniTrendLine(section.masteryHistory, getMasteryColor(section.latestMastery));
+
+                return `
+                  <div class="trackSectionCard">
+                    <div class="trackSectionHead">
+                      <strong class="trackSectionName">${escapeHtml(section.name)}</strong>
+                      <span class="masteryBadge" style="background: ${getMasteryColor(section.latestMastery)}">${getMasteryLabel(section.latestMastery)}</span>
+                    </div>
+                    <div class="trackSectionStats">
+                      <div class="trackSectionStat">
+                        <span class="trackSectionStatLabel">最高BPM</span>
+                        <strong class="trackSectionStatValue">${section.maxBpm}</strong>
+                        ${bpmTrendSvg}
+                      </div>
+                      <div class="trackSectionStat">
+                        <span class="trackSectionStatLabel">错误趋势</span>
+                        <strong class="trackSectionStatValue" style="color: ${sectionTrendColor}">${sectionTrendText}</strong>
+                        ${mistakeTrendSvg}
+                      </div>
+                      <div class="trackSectionStat">
+                        <span class="trackSectionStatLabel">掌握程度</span>
+                        <strong class="trackSectionStatValue" style="color: ${getMasteryColor(section.latestMastery)}">${section.latestMastery}/5</strong>
+                        ${masteryTrendSvg}
+                      </div>
+                    </div>
+                    <div class="trackSectionMeta">
+                      <span class="muted">练习 ${section.practiceCount} 次</span>
+                    </div>
+                  </div>
+                `;
+              }).join('')}
+            </div>
+          </div>
+        ` : `
+          <div class="trackSectionsEmpty">
+            <span class="muted">💡 该曲目暂无分段练习记录，添加练习时可拆分片段进行精细化复盘</span>
+          </div>
+        `}
+
         ${track.notes.length ? `
           <div class="trackNotes">
             <div class="trackNotesTitle">练习备注</div>
@@ -1039,6 +1385,16 @@ function drawTrendLine(data, color) {
   const padding = 10;
   const points = data.map((item, index) => `${padding + index * ((width - padding * 2) / Math.max(data.length - 1, 1))},${height - padding - (item.value / max) * (height - padding * 2)}`).join(' ');
   return `<svg viewBox="0 0 ${width} ${height}" class="trendSvg"><polyline points="${points}" fill="none" stroke="${color}" stroke-width="3" stroke-linecap="round"/>${data.map((item, index) => `<circle cx="${padding + index * ((width - padding * 2) / Math.max(data.length - 1, 1))}" cy="${height - padding - (item.value / max) * (height - padding * 2)}" r="3" fill="${color}"/>`).join('')}</svg>`;
+}
+
+function drawMiniTrendLine(data, color) {
+  if (!data.length) return '';
+  const max = Math.max(...data.map((item) => item.value), 1);
+  const width = 120;
+  const height = 36;
+  const padding = 4;
+  const points = data.map((item, index) => `${padding + index * ((width - padding * 2) / Math.max(data.length - 1, 1))},${height - padding - (item.value / max) * (height - padding * 2)}`).join(' ');
+  return `<svg viewBox="0 0 ${width} ${height}" class="miniTrendSvg"><polyline points="${points}" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round"/></svg>`;
 }
 
 function drawLine(selector, data, unit, color) {

@@ -940,6 +940,369 @@ td button { margin-left: 6px; background: #dff3ef; }
   margin-bottom: 2px;
 }
 
+.sectionDivider {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 8px 0 4px 0;
+  padding-top: 12px;
+  border-top: 1px dashed #cfe2de;
+}
+
+.sectionDivider span {
+  font-weight: 600;
+  color: #172522;
+  font-size: 14px;
+}
+
+.secondary.small {
+  padding: 6px 12px;
+  font-size: 12px;
+  background: #f0f4f2;
+  color: #0f766e;
+  border: 1px solid #a7c9c2;
+  border-radius: 6px;
+  font-weight: 600;
+  transition: all 0.15s ease;
+}
+
+.secondary.small:hover {
+  background: #e4efec;
+  border-color: #0f766e;
+}
+
+.sectionsList {
+  display: grid;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.sectionsEmpty {
+  text-align: center;
+  padding: 16px;
+  background: #f6faf8;
+  border-radius: 6px;
+  margin: 0;
+  font-size: 13px;
+}
+
+.sectionCard {
+  border: 1px solid #e4efec;
+  border-radius: 8px;
+  padding: 12px;
+  background: #fbfefc;
+  transition: all 0.2s ease;
+}
+
+.sectionCard:hover {
+  border-color: #a7c9c2;
+  box-shadow: 0 2px 8px rgba(23, 61, 55, 0.06);
+}
+
+.sectionHead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.sectionNameInput {
+  flex: 1;
+  font-weight: 600;
+  color: #172522;
+  border: 1px solid transparent;
+  background: transparent;
+  padding: 6px 8px;
+  border-radius: 4px;
+  transition: all 0.15s ease;
+}
+
+.sectionNameInput:hover,
+.sectionNameInput:focus {
+  border-color: #c4d9d5;
+  background: white;
+}
+
+.sectionDelBtn {
+  background: none;
+  border: none;
+  color: #94a3a0;
+  font-size: 20px;
+  line-height: 1;
+  padding: 4px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+}
+
+.sectionDelBtn:hover {
+  background: #fee2e2;
+  color: #dc2626;
+}
+
+.sectionFields {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.sectionField {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sectionField label {
+  font-size: 11px;
+  color: #60736f;
+  font-weight: 500;
+}
+
+.sectionField input,
+.sectionField select {
+  padding: 8px 10px;
+  font-size: 13px;
+}
+
+.sectionNoteInput {
+  font-size: 13px;
+  padding: 8px 10px;
+}
+
+.sectionQuickAdd {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+  padding-top: 8px;
+  border-top: 1px dashed #e4efec;
+}
+
+.sectionQuickAdd span {
+  color: #60736f;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.quickSectionBtn {
+  background: #f0f4f2;
+  color: #172522;
+  border: 1px solid #cfe2de;
+  border-radius: 4px;
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.quickSectionBtn:hover {
+  background: #0f766e;
+  color: white;
+  border-color: #0f766e;
+}
+
+.sectionViewBtn {
+  background: #dcfce7;
+  color: #166534;
+  border: 1px solid #86efac;
+  border-radius: 4px;
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.sectionViewBtn:hover {
+  background: #bbf7d0;
+  border-color: #4ade80;
+}
+
+.sectionDetailRow td {
+  background: #f6faf8;
+  padding: 16px 20px;
+}
+
+.sectionDetail {
+  animation: fadeIn 0.2s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.sectionDetailTitle {
+  font-weight: 600;
+  color: #172522;
+  margin-bottom: 12px;
+  font-size: 14px;
+}
+
+.sectionDetailGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 10px;
+}
+
+.sectionDetailCard {
+  border: 1px solid #e4efec;
+  border-radius: 6px;
+  padding: 12px;
+  background: white;
+}
+
+.sectionDetailHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  gap: 8px;
+}
+
+.sectionDetailHead strong {
+  color: #172522;
+  font-size: 14px;
+}
+
+.masteryBadge {
+  color: white;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.sectionDetailStats {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+
+.sectionDetailStats span {
+  color: #60736f;
+  font-size: 12px;
+}
+
+.sectionDetailStats strong {
+  color: #172522;
+  font-weight: 600;
+}
+
+.sectionDetailNote {
+  color: #172522;
+  font-size: 12px;
+  padding: 6px 8px;
+  background: #f6faf8;
+  border-radius: 4px;
+  line-height: 1.4;
+}
+
+.trackSections {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid #e4efec;
+}
+
+.trackSectionsTitle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.trackSectionsTitle span:first-child {
+  font-weight: 600;
+  color: #172522;
+  font-size: 15px;
+}
+
+.trackSectionsGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.trackSectionCard {
+  border: 1px solid #e4efec;
+  border-radius: 8px;
+  padding: 14px;
+  background: white;
+  transition: all 0.2s ease;
+}
+
+.trackSectionCard:hover {
+  border-color: #a7c9c2;
+  box-shadow: 0 2px 8px rgba(23, 61, 55, 0.06);
+}
+
+.trackSectionHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  gap: 8px;
+}
+
+.trackSectionName {
+  color: #172522;
+  font-size: 15px;
+}
+
+.trackSectionStats {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.trackSectionStat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.trackSectionStatLabel {
+  color: #60736f;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.trackSectionStatValue {
+  font-size: 18px;
+  font-weight: 700;
+  color: #172522;
+}
+
+.miniTrendSvg {
+  width: 100%;
+  min-height: 36px;
+  max-height: 36px;
+  margin-top: 2px;
+}
+
+.trackSectionMeta {
+  padding-top: 8px;
+  border-top: 1px dashed #e4efec;
+}
+
+.trackSectionsEmpty {
+  margin-top: 16px;
+  padding: 16px;
+  text-align: center;
+  background: #f6faf8;
+  border-radius: 8px;
+}
+
+.trackSectionsEmpty .muted {
+  font-size: 13px;
+}
+
 @media (max-width: 900px) {
   .hero, .layout, .cards, .summary, .pair, .planForm .pair, .trackStats, .goalForm .pair { display: block; }
   .panel, .summary article, .planPanel, .goalsPanel, .goalDashboard { margin-top: 14px; }
@@ -952,4 +1315,7 @@ td button { margin-left: 6px; background: #dff3ef; }
   .goalHead { flex-direction: column; align-items: flex-start; }
   .goalActions { flex-direction: column; }
   .goalAchieve, .goalDel { width: 100%; }
+  .sectionFields { grid-template-columns: 1fr 1fr; }
+  .sectionDetailGrid { grid-template-columns: 1fr; }
+  .trackSectionsGrid { grid-template-columns: 1fr; }
 }
