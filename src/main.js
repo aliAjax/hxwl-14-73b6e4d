@@ -138,7 +138,10 @@ form.addEventListener('submit', (event) => {
   render();
 });
 search.addEventListener('input', render);
-pieceFilter.addEventListener('change', render);
+pieceFilter.addEventListener('change', () => {
+  archiveFilter = '';
+  render();
+});
 document.querySelector('#sample').addEventListener('click', () => {
   records = seed;
   save();
@@ -153,10 +156,14 @@ function render() {
   const selectedPiece = pieceFilter.value;
   const pieces = [...new Set(records.map((record) => record.piece))].sort();
   pieceFilter.innerHTML = `<option value="">全部曲目</option>${pieces.map((piece) => `<option>${piece}</option>`).join('')}`;
-  pieceFilter.value = selectedPiece && pieces.includes(selectedPiece) ? selectedPiece : '';
+  if (archiveFilter) {
+    pieceFilter.value = pieces.includes(archiveFilter) ? archiveFilter : '';
+  } else {
+    pieceFilter.value = selectedPiece && pieces.includes(selectedPiece) ? selectedPiece : '';
+  }
+  const effectivePieceFilter = archiveFilter || pieceFilter.value;
   const filtered = records
-    .filter((record) => !pieceFilter.value || record.piece === pieceFilter.value)
-    .filter((record) => !archiveFilter || record.piece === archiveFilter)
+    .filter((record) => !effectivePieceFilter || record.piece === effectivePieceFilter)
     .filter((record) => [record.instrument, record.piece, record.note].join(' ').includes(search.value.trim()))
     .sort((a, b) => a.date.localeCompare(b.date));
   const uncompletedCount = planTasks.filter((task) => !task.completed).length;
@@ -177,6 +184,7 @@ function render() {
     filterBadge.innerHTML = `<span class="filterTag">筛选: ${archiveFilter} <button id="clearFilter" class="clearFilter">×</button></span>`;
     document.querySelector('#clearFilter').addEventListener('click', () => {
       archiveFilter = '';
+      pieceFilter.value = '';
       render();
     });
   } else {
