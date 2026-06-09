@@ -2,6 +2,7 @@ import './styles.css';
 
 const key = 'hxwl-14-music-practice';
 const planKey = 'hxwl-14-music-practice-plan';
+const goalKey = 'hxwl-14-music-practice-goals';
 const seed = [
   { id: crypto.randomUUID(), instrument: '电吉他', piece: 'Blue Bossa', date: '2026-06-01', bpm: 86, minutes: 35, mistakes: 18, note: '和弦转换卡顿' },
   { id: crypto.randomUUID(), instrument: '电吉他', piece: 'Blue Bossa', date: '2026-06-03', bpm: 92, minutes: 42, mistakes: 13, note: '副歌更稳定' },
@@ -37,6 +38,85 @@ function savePlan(tasks) {
 
 let planTasks = loadPlan();
 
+const goalSeed = [
+  { id: crypto.randomUUID(), piece: 'Blue Bossa', targetBpm: 120, startBpm: 86, targetDate: '2026-06-30', weeklyMinutes: 180, createdAt: '2026-06-01', achieved: false, achievedAt: null },
+  { id: crypto.randomUUID(), piece: 'Autumn Leaves', targetBpm: 100, startBpm: 72, targetDate: '2026-06-20', weeklyMinutes: 150, createdAt: '2026-06-01', achieved: false, achievedAt: null }
+];
+
+function loadGoals() {
+  return JSON.parse(localStorage.getItem(goalKey) || 'null') || goalSeed;
+}
+
+function saveGoals(goals) {
+  localStorage.setItem(goalKey, JSON.stringify(goals));
+}
+
+let goals = loadGoals();
+
+function getWeekRange(date = new Date()) {
+  const d = new Date(date);
+  const day = d.getDay();
+  const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+  const monday = new Date(d.setDate(diff));
+  monday.setHours(0, 0, 0, 0);
+  const sunday = new Date(monday);
+  sunday.setDate(sunday.getDate() + 6);
+  sunday.setHours(23, 59, 59, 999);
+  return { start: monday, end: sunday };
+}
+
+function getWeekMinutes(piece) {
+  const { start, end } = getWeekRange();
+  const formatDate = (d) => {
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+  const startStr = formatDate(start);
+  const endStr = formatDate(end);
+  return records
+    .filter(r => r.piece === piece && r.date >= startStr && r.date <= endStr)
+    .reduce((sum, r) => sum + r.minutes, 0);
+}
+
+function getMaxBpm(piece) {
+  const pieceRecords = records.filter(r => r.piece === piece);
+  return pieceRecords.length ? Math.max(...pieceRecords.map(r => r.bpm)) : 0;
+}
+
+function calculateGoalProgress(goal) {
+  const currentBpm = getMaxBpm(goal.piece);
+  const bpmProgress = goal.targetBpm > goal.startBpm
+    ? Math.min(100, Math.max(0, ((currentBpm - goal.startBpm) / (goal.targetBpm - goal.startBpm)) * 100))
+    : 100;
+  const weekMinutes = getWeekMinutes(goal.piece);
+  const weeklyProgress = goal.weeklyMinutes > 0
+    ? Math.min(100, (weekMinutes / goal.weeklyMinutes) * 100)
+    : 0;
+  const today = new Date();
+  const targetDate = new Date(goal.targetDate);
+  const createdDate = new Date(goal.createdAt);
+  const totalDays = Math.ceil((targetDate - createdDate) / (1000 * 60 * 60 * 24));
+  const daysPassed = Math.ceil((today - createdDate) / (1000 * 60 * 60 * 24));
+  const timeProgress = totalDays > 0 ? Math.min(100, Math.max(0, (daysPassed / totalDays) * 100)) : 100;
+  const isOverdue = !goal.achieved && today > targetDate;
+  const daysRemaining = Math.ceil((targetDate - today) / (1000 * 60 * 60 * 24));
+  const isAchieved = goal.achieved || currentBpm >= goal.targetBpm;
+  return {
+    bpmProgress: Math.round(bpmProgress),
+    weeklyProgress: Math.round(weeklyProgress),
+    timeProgress: Math.round(timeProgress),
+    currentBpm,
+    weekMinutes,
+    isOverdue,
+    daysRemaining,
+    isAchieved,
+    totalDays,
+    daysPassed
+  };
+}
+
 document.querySelector('#app').innerHTML = `
   <main class="shell">
     <header class="hero">
@@ -61,6 +141,32 @@ document.querySelector('#app').innerHTML = `
         <button class="primary">添加任务</button>
       </form>
       <div id="planList" class="planList"></div>
+    </section>
+
+    <section class="panel goalsPanel">
+      <div class="panelHead">
+        <h2>练习目标</h2>
+        <span class="muted" id="goalsSummary"></span>
+      </div>
+      <form id="goalForm" class="goalForm">
+        <div class="pair">
+          <select name="piece" required>
+            <option value="">选择曲目</option>
+          </select>
+          <input name="targetBpm" type="number" min="1" step="1" placeholder="目标BPM" required />
+        </div>
+        <div class="pair">
+          <input name="targetDate" type="date" required />
+          <input name="weeklyMinutes" type="number" min="1" step="1" placeholder="每周练习分钟" required />
+        </div>
+        <button class="primary">设置目标</button>
+      </form>
+      <div id="goalsList" class="goalsList"></div>
+    </section>
+
+    <section class="panel goalDashboard">
+      <div class="panelHead"><h2>目标进度仪表盘</h2></div>
+      <div id="goalDashboard" class="goalDashboardGrid"></div>
     </section>
 
     <section class="layout">
@@ -109,6 +215,7 @@ const form = document.querySelector('#form');
 const search = document.querySelector('#search');
 const pieceFilter = document.querySelector('#pieceFilter');
 const planForm = document.querySelector('#planForm');
+const goalForm = document.querySelector('#goalForm');
 
 planForm.addEventListener('submit', (event) => {
   event.preventDefault();
@@ -124,6 +231,32 @@ planForm.addEventListener('submit', (event) => {
   planTasks.push(task);
   savePlan(planTasks);
   planForm.reset();
+  render();
+});
+
+goalForm.addEventListener('submit', (event) => {
+  event.preventDefault();
+  const data = Object.fromEntries(new FormData(goalForm).entries());
+  const existingGoal = goals.find(g => g.piece === data.piece && !g.achieved);
+  if (existingGoal) {
+    if (!confirm('该曲目已有进行中的目标，是否覆盖？')) return;
+    goals = goals.filter(g => g.id !== existingGoal.id);
+  }
+  const startBpm = getMaxBpm(data.piece) || 0;
+  const goal = {
+    id: crypto.randomUUID(),
+    piece: data.piece,
+    targetBpm: Number(data.targetBpm),
+    startBpm,
+    targetDate: data.targetDate,
+    weeklyMinutes: Number(data.weeklyMinutes),
+    createdAt: getToday(),
+    achieved: false,
+    achievedAt: null
+  };
+  goals.push(goal);
+  saveGoals(goals);
+  goalForm.reset();
   render();
 });
 
@@ -156,6 +289,8 @@ function render() {
   const selectedPiece = pieceFilter.value;
   const pieces = [...new Set(records.map((record) => record.piece))].sort();
   pieceFilter.innerHTML = `<option value="">全部曲目</option>${pieces.map((piece) => `<option>${piece}</option>`).join('')}`;
+  const goalPieceSelect = goalForm.querySelector('select[name="piece"]');
+  goalPieceSelect.innerHTML = `<option value="">选择曲目</option>${pieces.map((piece) => `<option>${piece}</option>`).join('')}`;
   if (archiveFilter) {
     pieceFilter.value = pieces.includes(archiveFilter) ? archiveFilter : '';
   } else {
@@ -206,6 +341,8 @@ function render() {
   }));
   renderPlan();
   renderArchive();
+  renderGoals();
+  renderGoalDashboard();
 }
 
 function renderArchive() {
@@ -308,6 +445,150 @@ function renderPlan() {
     savePlan(planTasks);
     render();
   }));
+}
+
+function renderGoals() {
+  const listEl = document.querySelector('#goalsList');
+  const summaryEl = document.querySelector('#goalsSummary');
+  const activeGoals = goals.filter(g => !g.achieved);
+  const achievedGoals = goals.filter(g => g.achieved);
+  summaryEl.textContent = `进行中 ${activeGoals.length} 项 · 已达成 ${achievedGoals.length} 项`;
+  if (!goals.length) {
+    listEl.innerHTML = '<p class="empty">暂无练习目标，设置目标开始追踪进度</p>';
+    return;
+  }
+  const sortedGoals = [...goals].sort((a, b) => {
+    if (a.achieved !== b.achieved) return a.achieved ? 1 : -1;
+    return a.targetDate.localeCompare(b.targetDate);
+  });
+  listEl.innerHTML = sortedGoals.map((goal) => {
+    const progress = calculateGoalProgress(goal);
+    let statusClass = '';
+    let statusText = '';
+    if (progress.isAchieved) {
+      statusClass = 'achieved';
+      statusText = '✓ 已达成';
+    } else if (progress.isOverdue) {
+      statusClass = 'overdue';
+      statusText = `⚠ 已逾期 ${Math.abs(progress.daysRemaining)} 天`;
+    } else {
+      statusText = `剩余 ${progress.daysRemaining} 天`;
+    }
+    return `
+      <div class="goalCard ${statusClass}" data-id="${goal.id}">
+        <div class="goalHead">
+          <div>
+            <h3 class="goalPiece">${goal.piece}</h3>
+            <div class="goalMeta">
+              <span>目标 BPM: <strong>${goal.targetBpm}</strong></span>
+              <span>截止: <strong>${goal.targetDate}</strong></span>
+              <span>每周: <strong>${goal.weeklyMinutes}min</strong></span>
+            </div>
+          </div>
+          <div class="goalStatus ${statusClass}">${statusText}</div>
+        </div>
+        <div class="goalProgress">
+          <div class="progressRow">
+            <span class="progressLabel">BPM 进度</span>
+            <span class="progressValue">${progress.currentBpm} / ${goal.targetBpm} (${progress.bpmProgress}%)</span>
+          </div>
+          <div class="progressBar"><div class="progressFill bpm" style="width: ${progress.bpmProgress}%"></div></div>
+          <div class="progressRow">
+            <span class="progressLabel">本周练习</span>
+            <span class="progressValue">${progress.weekMinutes} / ${goal.weeklyMinutes}min (${progress.weeklyProgress}%)</span>
+          </div>
+          <div class="progressBar"><div class="progressFill weekly" style="width: ${progress.weeklyProgress}%"></div></div>
+          <div class="progressRow">
+            <span class="progressLabel">时间进度</span>
+            <span class="progressValue">${progress.daysPassed} / ${progress.totalDays} 天 (${progress.timeProgress}%)</span>
+          </div>
+          <div class="progressBar"><div class="progressFill time" style="width: ${progress.timeProgress}%"></div></div>
+        </div>
+        <div class="goalActions">
+          ${!progress.isAchieved ? `<button class="goalAchieve" data-goal-achieve="${goal.id}">标记达成</button>` : ''}
+          <button class="goalDel" data-goal-del="${goal.id}" aria-label="删除">删除</button>
+        </div>
+      </div>
+    `;
+  }).join('');
+  document.querySelectorAll('[data-goal-achieve]').forEach((button) => button.addEventListener('click', () => {
+    const goalId = button.dataset.goalAchieve;
+    goals = goals.map((g) => g.id === goalId ? { ...g, achieved: true, achievedAt: getToday() } : g);
+    saveGoals(goals);
+    render();
+  }));
+  document.querySelectorAll('[data-goal-del]').forEach((button) => button.addEventListener('click', () => {
+    if (!confirm('确定删除该目标？')) return;
+    goals = goals.filter((g) => g.id !== button.dataset.goalDel);
+    saveGoals(goals);
+    render();
+  }));
+}
+
+function renderGoalDashboard() {
+  const dashboardEl = document.querySelector('#goalDashboard');
+  if (!goals.length) {
+    dashboardEl.innerHTML = '<p class="empty">设置目标后查看进度仪表盘</p>';
+    return;
+  }
+  const activeGoals = goals.filter(g => !g.achieved);
+  const achievedGoals = goals.filter(g => g.achieved);
+  const overdueGoals = activeGoals.filter(g => calculateGoalProgress(g).isOverdue);
+  const totalWeekMinutes = activeGoals.reduce((sum, g) => sum + getWeekMinutes(g.piece), 0);
+  const totalTargetWeekMinutes = activeGoals.reduce((sum, g) => sum + g.weeklyMinutes, 0);
+  const overallWeekProgress = totalTargetWeekMinutes > 0
+    ? Math.round((totalWeekMinutes / totalTargetWeekMinutes) * 100)
+    : 0;
+  const avgBpmProgress = activeGoals.length
+    ? Math.round(activeGoals.reduce((sum, g) => sum + calculateGoalProgress(g).bpmProgress, 0) / activeGoals.length)
+    : 0;
+  dashboardEl.innerHTML = `
+    <div class="dashboardStat">
+      <span class="dashboardLabel">进行中目标</span>
+      <strong class="dashboardValue">${activeGoals.length}</strong>
+    </div>
+    <div class="dashboardStat">
+      <span class="dashboardLabel">已达成目标</span>
+      <strong class="dashboardValue achieved">${achievedGoals.length}</strong>
+    </div>
+    <div class="dashboardStat">
+      <span class="dashboardLabel">逾期目标</span>
+      <strong class="dashboardValue ${overdueGoals.length ? 'overdue' : ''}">${overdueGoals.length}</strong>
+    </div>
+    <div class="dashboardStat">
+      <span class="dashboardLabel">本周总练习</span>
+      <strong class="dashboardValue">${totalWeekMinutes}min</strong>
+      <div class="dashboardMiniBar">
+        <div class="dashboardMiniFill" style="width: ${Math.min(100, overallWeekProgress)}%"></div>
+      </div>
+      <span class="dashboardMiniLabel">目标 ${totalTargetWeekMinutes}min · ${overallWeekProgress}%</span>
+    </div>
+    <div class="dashboardStat">
+      <span class="dashboardLabel">平均BPM进度</span>
+      <strong class="dashboardValue">${avgBpmProgress}%</strong>
+      <div class="dashboardMiniBar">
+        <div class="dashboardMiniFill bpm" style="width: ${avgBpmProgress}%"></div>
+      </div>
+    </div>
+    ${overdueGoals.length ? `
+      <div class="overdueAlert">
+        <strong>⚠ 逾期提醒</strong>
+        <p>以下目标已逾期，请尽快完成：</p>
+        <ul>
+          ${overdueGoals.map(g => `<li>${g.piece} - 目标 ${g.targetBpm} BPM (逾期 ${Math.abs(calculateGoalProgress(g).daysRemaining)} 天)</li>`).join('')}
+        </ul>
+      </div>
+    ` : ''}
+    ${activeGoals.filter(g => calculateGoalProgress(g).bpmProgress >= 100).length ? `
+      <div class="achieveAlert">
+        <strong>🎉 可达成目标</strong>
+        <p>以下目标BPM已达标，点击"标记达成"完成目标：</p>
+        <ul>
+          ${activeGoals.filter(g => calculateGoalProgress(g).bpmProgress >= 100).map(g => `<li>${g.piece} - 当前 ${getMaxBpm(g.piece)} BPM ≥ 目标 ${g.targetBpm} BPM</li>`).join('')}
+        </ul>
+      </div>
+    ` : ''}
+  `;
 }
 
 function avg(values) {

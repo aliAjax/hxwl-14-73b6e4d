@@ -389,11 +389,329 @@ td button { margin-left: 6px; background: #dff3ef; }
   flex: 1;
 }
 
+.goalsPanel, .goalDashboard {
+  margin-top: 18px;
+}
+
+.goalForm {
+  display: grid;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.goalForm .pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.goalsList {
+  margin-top: 16px;
+  display: grid;
+  gap: 14px;
+}
+
+.goalCard {
+  border: 1px solid #e4efec;
+  border-radius: 10px;
+  padding: 16px;
+  background: #fbfefc;
+  transition: all 0.2s ease;
+}
+
+.goalCard:hover {
+  border-color: #a7c9c2;
+  box-shadow: 0 4px 12px rgba(23, 61, 55, 0.06);
+}
+
+.goalCard.achieved {
+  background: #f0fdf4;
+  border-color: #86efac;
+}
+
+.goalCard.overdue {
+  background: #fef2f2;
+  border-color: #fca5a5;
+}
+
+.goalHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.goalPiece {
+  margin: 0 0 6px 0;
+  font-size: 17px;
+  font-weight: 700;
+  color: #172522;
+}
+
+.goalMeta {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.goalMeta span {
+  color: #60736f;
+  font-size: 13px;
+}
+
+.goalMeta strong {
+  color: #172522;
+  font-weight: 600;
+}
+
+.goalStatus {
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  background: #e0f2fe;
+  color: #0369a1;
+  flex-shrink: 0;
+}
+
+.goalStatus.achieved {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.goalStatus.overdue {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.goalProgress {
+  display: grid;
+  gap: 10px;
+}
+
+.progressRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+.progressLabel {
+  color: #60736f;
+  font-size: 13px;
+}
+
+.progressValue {
+  color: #172522;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.progressBar {
+  height: 8px;
+  background: #e4efec;
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: 6px;
+}
+
+.progressFill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.3s ease;
+}
+
+.progressFill.bpm {
+  background: linear-gradient(90deg, #0f766e, #14b8a6);
+}
+
+.progressFill.weekly {
+  background: linear-gradient(90deg, #d97706, #f59e0b);
+}
+
+.progressFill.time {
+  background: linear-gradient(90deg, #6366f1, #8b5cf6);
+}
+
+.goalActions {
+  display: flex;
+  gap: 8px;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid #e4efec;
+}
+
+.goalAchieve {
+  background: #0f766e;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.goalAchieve:hover {
+  background: #0d6b63;
+}
+
+.goalDel {
+  background: #fee2e2;
+  color: #dc2626;
+  border: none;
+  border-radius: 6px;
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.goalDel:hover {
+  background: #fecaca;
+}
+
+.goalDashboardGrid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.dashboardStat {
+  border: 1px solid #e4efec;
+  border-radius: 8px;
+  padding: 14px;
+  background: white;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.dashboardLabel {
+  color: #60736f;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.dashboardValue {
+  font-size: 26px;
+  font-weight: 700;
+  color: #172522;
+}
+
+.dashboardValue.achieved {
+  color: #059669;
+}
+
+.dashboardValue.overdue {
+  color: #dc2626;
+}
+
+.dashboardMiniBar {
+  height: 6px;
+  background: #e4efec;
+  border-radius: 3px;
+  overflow: hidden;
+  margin-top: 4px;
+}
+
+.dashboardMiniFill {
+  height: 100%;
+  background: linear-gradient(90deg, #d97706, #f59e0b);
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+
+.dashboardMiniFill.bpm {
+  background: linear-gradient(90deg, #0f766e, #14b8a6);
+}
+
+.dashboardMiniLabel {
+  color: #60736f;
+  font-size: 11px;
+  margin-top: 2px;
+}
+
+.overdueAlert {
+  grid-column: 1 / -1;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  padding: 14px 16px;
+  margin-top: 4px;
+}
+
+.overdueAlert strong {
+  color: #dc2626;
+  font-size: 15px;
+  display: block;
+  margin-bottom: 6px;
+}
+
+.overdueAlert p {
+  color: #7f1d1d;
+  font-size: 13px;
+  margin: 0 0 8px 0;
+}
+
+.overdueAlert ul {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.overdueAlert li {
+  color: #7f1d1d;
+  font-size: 13px;
+  margin-bottom: 2px;
+}
+
+.achieveAlert {
+  grid-column: 1 / -1;
+  background: #f0fdf4;
+  border: 1px solid #86efac;
+  border-radius: 8px;
+  padding: 14px 16px;
+  margin-top: 4px;
+}
+
+.achieveAlert strong {
+  color: #059669;
+  font-size: 15px;
+  display: block;
+  margin-bottom: 6px;
+}
+
+.achieveAlert p {
+  color: #166534;
+  font-size: 13px;
+  margin: 0 0 8px 0;
+}
+
+.achieveAlert ul {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.achieveAlert li {
+  color: #166534;
+  font-size: 13px;
+  margin-bottom: 2px;
+}
+
 @media (max-width: 900px) {
-  .hero, .layout, .cards, .summary, .pair, .planForm .pair, .trackStats { display: block; }
-  .panel, .summary article, .planPanel { margin-top: 14px; }
+  .hero, .layout, .cards, .summary, .pair, .planForm .pair, .trackStats, .goalForm .pair { display: block; }
+  .panel, .summary article, .planPanel, .goalsPanel, .goalDashboard { margin-top: 14px; }
   .summary article { margin-top: 12px; }
   .taskMeta { gap: 10px; }
   .trackStats { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
   .trackStat { margin-bottom: 8px; }
+  .goalDashboardGrid { grid-template-columns: 1fr 1fr; }
+  .goalMeta { gap: 10px; }
+  .goalHead { flex-direction: column; align-items: flex-start; }
+  .goalActions { flex-direction: column; }
+  .goalAchieve, .goalDel { width: 100%; }
 }
