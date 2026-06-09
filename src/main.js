@@ -1,6 +1,7 @@
 import './styles.css';
 
 const key = 'hxwl-14-music-practice';
+const planKey = 'hxwl-14-music-practice-plan';
 const seed = [
   { id: crypto.randomUUID(), instrument: '电吉他', piece: 'Blue Bossa', date: '2026-06-01', bpm: 86, minutes: 35, mistakes: 18, note: '和弦转换卡顿' },
   { id: crypto.randomUUID(), instrument: '电吉他', piece: 'Blue Bossa', date: '2026-06-03', bpm: 92, minutes: 42, mistakes: 13, note: '副歌更稳定' },
@@ -12,6 +13,25 @@ const seed = [
 let records = JSON.parse(localStorage.getItem(key) || 'null') || seed;
 let editingId = null;
 
+function getToday() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function loadPlan() {
+  const data = JSON.parse(localStorage.getItem(planKey) || 'null') || {};
+  const today = getToday();
+  return data[today] || [];
+}
+
+function savePlan(tasks) {
+  const data = JSON.parse(localStorage.getItem(planKey) || 'null') || {};
+  const today = getToday();
+  data[today] = tasks;
+  localStorage.setItem(planKey, JSON.stringify(data));
+}
+
+let planTasks = loadPlan();
+
 document.querySelector('#app').innerHTML = `
   <main class="shell">
     <header class="hero">
@@ -21,6 +41,22 @@ document.querySelector('#app').innerHTML = `
       </div>
       <button id="sample">载入示例</button>
     </header>
+
+    <section class="panel planPanel">
+      <div class="panelHead">
+        <h2>今日练习计划</h2>
+        <span class="planDate">${getToday()}</span>
+      </div>
+      <form id="planForm" class="planForm">
+        <input name="piece" placeholder="曲目" required />
+        <div class="pair">
+          <input name="targetBpm" type="number" min="1" step="1" placeholder="目标BPM" required />
+          <input name="estimatedMinutes" type="number" min="1" step="1" placeholder="预计分钟" required />
+        </div>
+        <button class="primary">添加任务</button>
+      </form>
+      <div id="planList" class="planList"></div>
+    </section>
 
     <section class="layout">
       <form id="form" class="panel">
@@ -61,6 +97,24 @@ document.querySelector('#app').innerHTML = `
 const form = document.querySelector('#form');
 const search = document.querySelector('#search');
 const pieceFilter = document.querySelector('#pieceFilter');
+const planForm = document.querySelector('#planForm');
+
+planForm.addEventListener('submit', (event) => {
+  event.preventDefault();
+  const data = Object.fromEntries(new FormData(planForm).entries());
+  const task = {
+    id: crypto.randomUUID(),
+    piece: data.piece,
+    targetBpm: Number(data.targetBpm),
+    estimatedMinutes: Number(data.estimatedMinutes),
+    completed: false,
+    date: getToday()
+  };
+  planTasks.push(task);
+  savePlan(planTasks);
+  planForm.reset();
+  render();
+});
 
 form.addEventListener('submit', (event) => {
   event.preventDefault();
@@ -93,10 +147,14 @@ function render() {
     .filter((record) => !pieceFilter.value || record.piece === pieceFilter.value)
     .filter((record) => [record.instrument, record.piece, record.note].join(' ').includes(search.value.trim()))
     .sort((a, b) => a.date.localeCompare(b.date));
+  const uncompletedCount = planTasks.filter((task) => !task.completed).length;
+  const totalEstimated = planTasks.reduce((sum, task) => sum + task.estimatedMinutes, 0);
   document.querySelector('#summary').innerHTML = [
     ['总练习时长', `${records.reduce((sum, record) => sum + record.minutes, 0)}min`],
     ['曲目数', pieces.length],
-    ['平均BPM', Math.round(avg(records.map((record) => record.bpm)))]
+    ['平均BPM', Math.round(avg(records.map((record) => record.bpm)))],
+    ['今日待完成', uncompletedCount + ' 项'],
+    ['预计总时长', totalEstimated + 'min']
   ].map(([label, value]) => `<article><span>${label}</span><strong>${value}</strong></article>`).join('');
   drawLine('#bpmChart', filtered.map((record) => ({ label: record.date.slice(5), value: record.bpm })), 'BPM', '#0f766e');
   drawBars('#minutesChart', groupDay(filtered, 'minutes'), 'min', '#d97706');
@@ -113,6 +171,44 @@ function render() {
     Object.entries(record).forEach(([name, value]) => {
       if (form.elements[name]) form.elements[name].value = value;
     });
+  }));
+  renderPlan();
+}
+
+function renderPlan() {
+  const listEl = document.querySelector('#planList');
+  if (!planTasks.length) {
+    listEl.innerHTML = '<p class="empty">暂无今日练习计划，点击上方添加任务</p>';
+    return;
+  }
+  listEl.innerHTML = planTasks.map((task) => `
+    <div class="planTask ${task.completed ? 'completed' : ''}" data-id="${task.id}">
+      <label class="taskCheck">
+        <input type="checkbox" ${task.completed ? 'checked' : ''} data-toggle="${task.id}" />
+        <span class="checkmark"></span>
+      </label>
+      <div class="taskContent">
+        <div class="taskPiece">${task.piece}</div>
+        <div class="taskMeta">
+          <span>目标 BPM: <strong>${task.targetBpm}</strong></span>
+          <span>预计: <strong>${task.estimatedMinutes}min</strong></span>
+        </div>
+      </div>
+      <button class="taskDel" data-plan-del="${task.id}" aria-label="删除">×</button>
+    </div>
+  `).join('');
+  document.querySelectorAll('[data-toggle]').forEach((checkbox) => checkbox.addEventListener('change', () => {
+    const taskId = checkbox.dataset.toggle;
+    planTasks = planTasks.map((task) =>
+      task.id === taskId ? { ...task, completed: checkbox.checked } : task
+    );
+    savePlan(planTasks);
+    render();
+  }));
+  document.querySelectorAll('[data-plan-del]').forEach((button) => button.addEventListener('click', () => {
+    planTasks = planTasks.filter((task) => task.id !== button.dataset.planDel);
+    savePlan(planTasks);
+    render();
   }));
 }
 

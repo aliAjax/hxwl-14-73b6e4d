@@ -59,7 +59,7 @@ textarea { min-height: 86px; resize: vertical; }
 
 .summary {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   gap: 12px;
   margin-bottom: 18px;
 }
@@ -89,7 +89,132 @@ th, td { padding: 12px 10px; border-bottom: 1px solid #e4efec; text-align: left;
 td button { margin-left: 6px; background: #dff3ef; }
 .empty { color: #60736f; }
 
+.planPanel {
+  margin-top: 18px;
+}
+.planDate {
+  color: #60736f;
+  font-size: 13px;
+  font-weight: 500;
+}
+.planForm {
+  display: grid;
+  gap: 12px;
+  margin-top: 12px;
+}
+.planForm .pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.planList {
+  margin-top: 16px;
+  display: grid;
+  gap: 10px;
+}
+.planTask {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  background: #f6faf8;
+  border: 1px solid #e4efec;
+  border-radius: 8px;
+  transition: all 0.2s ease;
+}
+.planTask:hover {
+  background: #edf6f2;
+  border-color: #cfe2de;
+}
+.planTask.completed {
+  background: #f0f4f2;
+  opacity: 0.65;
+}
+.planTask.completed .taskPiece {
+  text-decoration: line-through;
+  color: #60736f;
+}
+.taskCheck {
+  position: relative;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.taskCheck input {
+  position: absolute;
+  opacity: 0;
+  cursor: pointer;
+  width: 0;
+  height: 0;
+}
+.checkmark {
+  width: 22px;
+  height: 22px;
+  background: white;
+  border: 2px solid #c4d9d5;
+  border-radius: 5px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+}
+.taskCheck input:checked ~ .checkmark {
+  background: #0f766e;
+  border-color: #0f766e;
+}
+.taskCheck input:checked ~ .checkmark::after {
+  content: '';
+  width: 5px;
+  height: 10px;
+  border: solid white;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+  margin-top: -2px;
+}
+.taskContent {
+  flex: 1;
+  min-width: 0;
+}
+.taskPiece {
+  font-weight: 600;
+  font-size: 15px;
+  color: #172522;
+  margin-bottom: 4px;
+  word-break: break-word;
+}
+.taskMeta {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.taskMeta span {
+  color: #60736f;
+  font-size: 13px;
+}
+.taskMeta strong {
+  color: #172522;
+  font-weight: 600;
+}
+.taskDel {
+  background: none;
+  border: none;
+  color: #94a3a0;
+  font-size: 22px;
+  line-height: 1;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+}
+.taskDel:hover {
+  background: #fee2e2;
+  color: #dc2626;
+}
+
 @media (max-width: 900px) {
-  .hero, .layout, .cards, .summary, .pair { display: block; }
-  .panel, .summary article { margin-top: 14px; }
+  .hero, .layout, .cards, .summary, .pair, .planForm .pair { display: block; }
+  .panel, .summary article, .planPanel { margin-top: 14px; }
+  .summary article { margin-top: 12px; }
+  .taskMeta { gap: 10px; }
 }
