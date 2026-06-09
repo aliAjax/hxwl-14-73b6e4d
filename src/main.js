@@ -12,6 +12,7 @@ const seed = [
 
 let records = JSON.parse(localStorage.getItem(key) || 'null') || seed;
 let editingId = null;
+let archiveFilter = '';
 
 function getToday() {
   const now = new Date();
@@ -93,7 +94,13 @@ document.querySelector('#app').innerHTML = `
 
     <section class="panel">
       <div class="panelHead"><h2>记录列表</h2><input id="search" placeholder="搜索乐器、曲目或备注" /></div>
+      <div id="filterBadge" class="filterBadge"></div>
       <div class="tableWrap"><table><thead><tr><th>日期</th><th>乐器</th><th>曲目</th><th>BPM</th><th>时长</th><th>错误</th><th></th></tr></thead><tbody id="rows"></tbody></table></div>
+    </section>
+
+    <section class="panel">
+      <div class="panelHead"><h2>曲目档案</h2><span class="muted" id="archiveCount"></span></div>
+      <div id="trackArchive" class="trackArchive"></div>
     </section>
   </main>
 `;
@@ -149,6 +156,7 @@ function render() {
   pieceFilter.value = selectedPiece && pieces.includes(selectedPiece) ? selectedPiece : '';
   const filtered = records
     .filter((record) => !pieceFilter.value || record.piece === pieceFilter.value)
+    .filter((record) => !archiveFilter || record.piece === archiveFilter)
     .filter((record) => [record.instrument, record.piece, record.note].join(' ').includes(search.value.trim()))
     .sort((a, b) => a.date.localeCompare(b.date));
   const uncompletedCount = planTasks.filter((task) => !task.completed).length;
@@ -163,6 +171,18 @@ function render() {
   drawLine('#bpmChart', filtered.map((record) => ({ label: record.date.slice(5), value: record.bpm })), 'BPM', '#0f766e');
   drawBars('#minutesChart', groupDay(filtered, 'minutes'), 'min', '#d97706');
   drawLine('#mistakeChart', filtered.map((record) => ({ label: record.date.slice(5), value: record.mistakes })), '次', '#dc2626');
+
+  const filterBadge = document.querySelector('#filterBadge');
+  if (archiveFilter) {
+    filterBadge.innerHTML = `<span class="filterTag">筛选: ${archiveFilter} <button id="clearFilter" class="clearFilter">×</button></span>`;
+    document.querySelector('#clearFilter').addEventListener('click', () => {
+      archiveFilter = '';
+      render();
+    });
+  } else {
+    filterBadge.innerHTML = '';
+  }
+
   document.querySelector('#rows').innerHTML = filtered.slice().reverse().map((record) => `<tr><td>${record.date}</td><td>${record.instrument}</td><td>${record.piece}</td><td>${record.bpm}</td><td>${record.minutes}min</td><td>${record.mistakes}</td><td><button data-edit="${record.id}">编辑</button><button data-del="${record.id}">删除</button></td></tr>`).join('');
   document.querySelectorAll('[data-del]').forEach((button) => button.addEventListener('click', () => {
     records = records.filter((record) => record.id !== button.dataset.del);
@@ -177,6 +197,72 @@ function render() {
     });
   }));
   renderPlan();
+  renderArchive();
+}
+
+function renderArchive() {
+  const trackStats = getTrackStats();
+  const archiveEl = document.querySelector('#trackArchive');
+  const countEl = document.querySelector('#archiveCount');
+  countEl.textContent = `共 ${trackStats.length} 首`;
+
+  if (!trackStats.length) {
+    archiveEl.innerHTML = '<p class="empty">暂无曲目数据</p>';
+    return;
+  }
+
+  archiveEl.innerHTML = trackStats.map((track) => {
+    const trendColor = track.mistakeTrend < 0 ? '#059669' : track.mistakeTrend > 0 ? '#dc2626' : '#60736f';
+    const trendText = track.mistakeTrend < 0 ? `↓ ${Math.abs(track.mistakeTrend)}` : track.mistakeTrend > 0 ? `↑ ${track.mistakeTrend}` : '—';
+    const trendSvg = drawTrendLine(track.mistakes.sort((a, b) => a.date.localeCompare(b.date)), trendColor);
+
+    return `
+      <article class="trackCard ${archiveFilter === track.piece ? 'active' : ''}" data-track="${track.piece}">
+        <div class="trackHead">
+          <div>
+            <h3 class="trackTitle">${track.piece}</h3>
+            <span class="trackInstrument">${track.instrument} · ${track.practiceCount} 次练习</span>
+          </div>
+          <button class="trackFilterBtn" data-filter-track="${track.piece}">筛选记录</button>
+        </div>
+        <div class="trackStats">
+          <div class="trackStat">
+            <span class="trackStatLabel">最近练习</span>
+            <strong class="trackStatValue">${track.lastDate}</strong>
+          </div>
+          <div class="trackStat">
+            <span class="trackStatLabel">最高BPM</span>
+            <strong class="trackStatValue">${track.maxBpm}</strong>
+          </div>
+          <div class="trackStat">
+            <span class="trackStatLabel">累计时长</span>
+            <strong class="trackStatValue">${track.totalMinutes}min</strong>
+          </div>
+          <div class="trackStat">
+            <span class="trackStatLabel">错误趋势</span>
+            <strong class="trackStatValue" style="color: ${trendColor}">${trendText}</strong>
+            ${trendSvg}
+          </div>
+        </div>
+        ${track.notes.length ? `
+          <div class="trackNotes">
+            <div class="trackNotesTitle">练习备注</div>
+            <ul class="trackNotesList">
+              ${track.notes.map((n) => `<li><span class="noteDate">${n.date}</span><span class="noteText">${n.note}</span></li>`).join('')}
+            </ul>
+          </div>
+        ` : ''}
+      </article>
+    `;
+  }).join('');
+
+  document.querySelectorAll('[data-filter-track]').forEach((button) => {
+    button.addEventListener('click', () => {
+      archiveFilter = button.dataset.filterTrack;
+      render();
+      document.querySelector('#rows').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  });
 }
 
 function renderPlan() {
@@ -224,6 +310,60 @@ function groupDay(data, field) {
   const map = new Map();
   data.forEach((record) => map.set(record.date, (map.get(record.date) || 0) + record[field]));
   return [...map.entries()].map(([label, value]) => ({ label: label.slice(5), value }));
+}
+
+function getTrackStats() {
+  const trackMap = new Map();
+  records.forEach((record) => {
+    if (!trackMap.has(record.piece)) {
+      trackMap.set(record.piece, {
+        piece: record.piece,
+        instrument: record.instrument,
+        records: [],
+        totalMinutes: 0,
+        maxBpm: 0,
+        lastDate: '',
+        notes: [],
+        mistakes: []
+      });
+    }
+    const track = trackMap.get(record.piece);
+    track.records.push(record);
+    track.totalMinutes += record.minutes;
+    track.maxBpm = Math.max(track.maxBpm, record.bpm);
+    track.lastDate = track.lastDate > record.date ? track.lastDate : record.date;
+    if (record.note && record.note.trim()) {
+      track.notes.push({ date: record.date, note: record.note });
+    }
+    track.mistakes.push({ date: record.date, value: record.mistakes });
+  });
+
+  return [...trackMap.values()].map((track) => {
+    const sortedRecords = track.records.sort((a, b) => a.date.localeCompare(b.date));
+    const sortedMistakes = track.mistakes.sort((a, b) => a.date.localeCompare(b.date));
+    const mistakeTrend = sortedMistakes.length >= 2
+      ? sortedMistakes[sortedMistakes.length - 1].value - sortedMistakes[0].value
+      : 0;
+    const practiceCount = track.records.length;
+
+    return {
+      ...track,
+      records: sortedRecords,
+      notes: track.notes.sort((a, b) => b.date.localeCompare(a.date)),
+      mistakeTrend,
+      practiceCount
+    };
+  }).sort((a, b) => b.lastDate.localeCompare(a.lastDate));
+}
+
+function drawTrendLine(data, color) {
+  if (!data.length) return '';
+  const max = Math.max(...data.map((item) => item.value), 1);
+  const width = 200;
+  const height = 60;
+  const padding = 10;
+  const points = data.map((item, index) => `${padding + index * ((width - padding * 2) / Math.max(data.length - 1, 1))},${height - padding - (item.value / max) * (height - padding * 2)}`).join(' ');
+  return `<svg viewBox="0 0 ${width} ${height}" class="trendSvg"><polyline points="${points}" fill="none" stroke="${color}" stroke-width="3" stroke-linecap="round"/>${data.map((item, index) => `<circle cx="${padding + index * ((width - padding * 2) / Math.max(data.length - 1, 1))}" cy="${height - padding - (item.value / max) * (height - padding * 2)}" r="3" fill="${color}"/>`).join('')}</svg>`;
 }
 
 function drawLine(selector, data, unit, color) {

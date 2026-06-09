@@ -212,9 +212,188 @@ td button { margin-left: 6px; background: #dff3ef; }
   color: #dc2626;
 }
 
+.muted {
+  color: #60736f;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.filterBadge {
+  margin-top: 12px;
+  margin-bottom: 8px;
+}
+
+.filterTag {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  background: #d1fae5;
+  color: #065f46;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.clearFilter {
+  background: none;
+  border: none;
+  color: #065f46;
+  font-size: 18px;
+  line-height: 1;
+  padding: 0 4px;
+  cursor: pointer;
+  border-radius: 3px;
+  transition: background 0.15s ease;
+}
+
+.clearFilter:hover {
+  background: rgba(6, 95, 70, 0.1);
+}
+
+.trackArchive {
+  display: grid;
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.trackCard {
+  border: 1px solid #e4efec;
+  border-radius: 10px;
+  padding: 18px;
+  background: #fbfefc;
+  transition: all 0.2s ease;
+}
+
+.trackCard:hover {
+  border-color: #a7c9c2;
+  box-shadow: 0 4px 12px rgba(23, 61, 55, 0.06);
+}
+
+.trackCard.active {
+  border-color: #0f766e;
+  background: #f0fdfa;
+  box-shadow: 0 4px 16px rgba(15, 118, 110, 0.15);
+}
+
+.trackHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.trackTitle {
+  margin: 0 0 4px 0;
+  font-size: 18px;
+  font-weight: 700;
+  color: #172522;
+}
+
+.trackInstrument {
+  color: #60736f;
+  font-size: 13px;
+}
+
+.trackFilterBtn {
+  background: #0f766e;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+}
+
+.trackFilterBtn:hover {
+  background: #0d6b63;
+}
+
+.trackCard.active .trackFilterBtn {
+  background: #065f46;
+}
+
+.trackStats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.trackStat {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.trackStatLabel {
+  color: #60736f;
+  font-size: 12px;
+}
+
+.trackStatValue {
+  font-size: 20px;
+  font-weight: 700;
+  color: #172522;
+}
+
+.trendSvg {
+  width: 100%;
+  min-height: 60px;
+  max-height: 60px;
+  margin-top: 4px;
+}
+
+.trackNotes {
+  border-top: 1px solid #e4efec;
+  padding-top: 14px;
+}
+
+.trackNotesTitle {
+  font-size: 13px;
+  font-weight: 600;
+  color: #172522;
+  margin-bottom: 10px;
+}
+
+.trackNotesList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.trackNotesList li {
+  display: flex;
+  gap: 10px;
+  padding: 8px 10px;
+  background: #f6faf8;
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+.noteDate {
+  color: #60736f;
+  font-weight: 500;
+  flex-shrink: 0;
+}
+
+.noteText {
+  color: #172522;
+  flex: 1;
+}
+
 @media (max-width: 900px) {
-  .hero, .layout, .cards, .summary, .pair, .planForm .pair { display: block; }
+  .hero, .layout, .cards, .summary, .pair, .planForm .pair, .trackStats { display: block; }
   .panel, .summary article, .planPanel { margin-top: 14px; }
   .summary article { margin-top: 12px; }
   .taskMeta { gap: 10px; }
+  .trackStats { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .trackStat { margin-bottom: 8px; }
 }
