@@ -59,7 +59,7 @@ textarea { min-height: 86px; resize: vertical; }
 
 .summary {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   gap: 12px;
   margin-bottom: 18px;
 }
@@ -89,100 +89,7 @@ th, td { padding: 12px 10px; border-bottom: 1px solid #e4efec; text-align: left;
 td button { margin-left: 6px; background: #dff3ef; }
 .empty { color: #60736f; }
 
-.planPanel { margin: 18px 0; }
-.planDate {
-  color: #60736f;
-  font-size: 14px;
-  background: #eef4f1;
-  padding: 6px 12px;
-  border-radius: 20px;
-}
-.planForm {
-  display: grid;
-  grid-template-columns: 2fr 1fr 1fr auto;
-  gap: 12px;
-  margin-top: 14px;
-  margin-bottom: 18px;
-}
-.planList { display: flex; flex-direction: column; gap: 10px; }
-.planItem {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  padding: 14px 16px;
-  background: #fbfffd;
-  border: 1px solid #e4efec;
-  border-radius: 8px;
-  transition: all 0.2s ease;
-}
-.planItem:hover { border-color: #0f766e; }
-.planItem.completed {
-  background: #f0fdf4;
-  border-color: #bbf7d0;
-  opacity: 0.75;
-}
-.planItem.completed .planPiece {
-  text-decoration: line-through;
-  color: #86efac;
-}
-.planCheck {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  cursor: pointer;
-  flex-shrink: 0;
-}
-.planCheck input {
-  position: absolute;
-  opacity: 0;
-  cursor: pointer;
-  height: 0;
-  width: 0;
-}
-.checkmark {
-  height: 22px;
-  width: 22px;
-  background-color: #fff;
-  border: 2px solid #c4d9d5;
-  border-radius: 6px;
-  display: inline-block;
-  transition: all 0.2s ease;
-}
-.planCheck:hover input ~ .checkmark { border-color: #0f766e; }
-.planCheck input:checked ~ .checkmark {
-  background-color: #0f766e;
-  border-color: #0f766e;
-}
-.checkmark:after {
-  content: "";
-  position: relative;
-  display: none;
-  left: 6px;
-  top: 2px;
-  width: 6px;
-  height: 10px;
-  border: solid white;
-  border-width: 0 2px 2px 0;
-  transform: rotate(45deg);
-}
-.planCheck input:checked ~ .checkmark:after { display: block; }
-.planInfo { flex: 1; display: flex; flex-direction: column; gap: 4px; }
-.planPiece { font-weight: 600; color: #172522; font-size: 15px; }
-.planMeta { color: #60736f; font-size: 13px; }
-.planDel {
-  border: 0;
-  border-radius: 6px;
-  padding: 8px 12px;
-  background: #fee2e2;
-  color: #dc2626;
-  font-size: 13px;
-  flex-shrink: 0;
-  transition: background 0.2s ease;
-}
-.planDel:hover { background: #fecaca; }
-
 @media (max-width: 900px) {
-  .hero, .layout, .cards, .summary, .pair, .planForm { display: block; }
+  .hero, .layout, .cards, .summary, .pair { display: block; }
   .panel, .summary article { margin-top: 14px; }
-  .planForm input, .planForm button { margin-top: 10px; }
 }
