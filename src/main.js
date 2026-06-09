@@ -85,6 +85,23 @@ function getMaxBpm(piece) {
   return pieceRecords.length ? Math.max(...pieceRecords.map(r => r.bpm)) : 0;
 }
 
+function getGoalAchievedAt(goal) {
+  const achievedRecord = records
+    .filter(r => r.piece === goal.piece && r.bpm >= goal.targetBpm)
+    .sort((a, b) => a.date.localeCompare(b.date))[0];
+  return achievedRecord ? achievedRecord.date : getToday();
+}
+
+function syncGoalAchievements() {
+  let changed = false;
+  goals = goals.map((goal) => {
+    if (goal.achieved || getMaxBpm(goal.piece) < goal.targetBpm) return goal;
+    changed = true;
+    return { ...goal, achieved: true, achievedAt: getGoalAchievedAt(goal) };
+  });
+  if (changed) saveGoals(goals);
+}
+
 function calculateGoalProgress(goal) {
   const currentBpm = getMaxBpm(goal.piece);
   const bpmProgress = goal.targetBpm > goal.startBpm
@@ -286,6 +303,7 @@ function save() {
 }
 
 function render() {
+  syncGoalAchievements();
   const selectedPiece = pieceFilter.value;
   const pieces = [...new Set(records.map((record) => record.piece))].sort();
   pieceFilter.innerHTML = `<option value="">全部曲目</option>${pieces.map((piece) => `<option>${piece}</option>`).join('')}`;
