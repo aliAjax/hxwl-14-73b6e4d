@@ -33,7 +33,273 @@ const seed = [
   ]}
 ];
 
-let records = JSON.parse(localStorage.getItem(key) || 'null') || seed;
+const historyKey = 'hxwl-14-music-practice-history';
+const metaKey = 'hxwl-14-music-practice-meta';
+
+const VersionManager = (() => {
+  const SCHEMA_VERSION = 1;
+  const MAX_HISTORY = 200;
+
+  function loadMeta() {
+    try {
+      return JSON.parse(localStorage.getItem(metaKey) || 'null') || { schemaVersion: 0, currentVersion: 0 };
+    } catch {
+      return { schemaVersion: 0, currentVersion: 0 };
+    }
+  }
+
+  function saveMeta(meta) {
+    localStorage.setItem(metaKey, JSON.stringify(meta));
+  }
+
+  function loadHistory() {
+    try {
+      return JSON.parse(localStorage.getItem(historyKey) || '[]');
+    } catch {
+      return [];
+    }
+  }
+
+  function saveHistory(history) {
+    const trimmed = history.length > MAX_HISTORY
+      ? history.slice(history.length - MAX_HISTORY)
+      : history;
+    localStorage.setItem(historyKey, JSON.stringify(trimmed));
+  }
+
+  function deepClone(obj) {
+    return JSON.parse(JSON.stringify(obj));
+  }
+
+  function stampRecords(recordsList, version) {
+    const now = new Date().toISOString();
+    return recordsList.map(r => ({
+      ...r,
+      _version: r._version || version,
+      _updatedAt: r._updatedAt || now
+    }));
+  }
+
+  function isMigrated(recordsList) {
+    return recordsList.length > 0 && recordsList.every(r => r._version !== undefined);
+  }
+
+  function generateDescription(action, details) {
+    const templates = {
+      add: (d) => d && d.count
+        ? `新增 ${d.count} 条练习记录${d.names ? '：' + d.names.join('、') : ''}`
+        : '新增练习记录',
+      edit: (d) => d && d.name
+        ? `编辑记录：${d.name}${d.field ? '（' + d.field + '）' : ''}`
+        : '编辑练习记录',
+      delete: (d) => d && d.name
+        ? `删除记录：${d.name}`
+        : d && d.count
+          ? `删除 ${d.count} 条记录`
+          : '删除练习记录',
+      import: (d) => d && d.count
+        ? `导入 ${d.count} 条练习记录${d.mode === 'overwrite' ? '（覆盖模式）' : ''}`
+        : '导入练习记录',
+      reset: () => '重置为示例数据',
+      rollback: (d) => d && d.toVersion !== undefined
+        ? `回滚到版本 v${d.toVersion}`
+        : '回滚到历史版本',
+      migrate: () => '迁移旧数据，初始化版本管理'
+    };
+    return templates[action] ? templates[action](details) : '未知操作';
+  }
+
+  function init() {
+    const meta = loadMeta();
+    let rawRecords;
+    try {
+      rawRecords = JSON.parse(localStorage.getItem(key) || 'null');
+    } catch {
+      rawRecords = null;
+    }
+
+    if (meta.schemaVersion < SCHEMA_VERSION) {
+      if (rawRecords && Array.isArray(rawRecords) && !isMigrated(rawRecords)) {
+        meta.currentVersion = 1;
+        meta.schemaVersion = SCHEMA_VERSION;
+        const migrated = stampRecords(rawRecords, meta.currentVersion);
+        localStorage.setItem(key, JSON.stringify(migrated));
+
+        const history = loadHistory();
+        history.push({
+          id: crypto.randomUUID(),
+          version: meta.currentVersion,
+          timestamp: new Date().toISOString(),
+          action: 'migrate',
+          description: generateDescription('migrate'),
+          affectedRecordIds: migrated.map(r => r.id),
+          snapshot: deepClone(migrated),
+          meta: { recordCount: migrated.length }
+        });
+        saveHistory(history);
+        saveMeta(meta);
+        return { records: migrated, meta, migrated: true };
+      }
+
+      if (!rawRecords) {
+        meta.currentVersion = 1;
+        meta.schemaVersion = SCHEMA_VERSION;
+        const seeded = stampRecords(deepClone(seed), meta.currentVersion);
+        localStorage.setItem(key, JSON.stringify(seeded));
+
+        const history = loadHistory();
+        history.push({
+          id: crypto.randomUUID(),
+          version: meta.currentVersion,
+          timestamp: new Date().toISOString(),
+          action: 'reset',
+          description: generateDescription('reset'),
+          affectedRecordIds: seeded.map(r => r.id),
+          snapshot: deepClone(seeded),
+          meta: { recordCount: seeded.length }
+        });
+        saveHistory(history);
+        saveMeta(meta);
+        return { records: seeded, meta, migrated: true };
+      }
+
+      meta.schemaVersion = SCHEMA_VERSION;
+      saveMeta(meta);
+    }
+
+    return { records: rawRecords || [], meta, migrated: false };
+  }
+
+  function recordChange(action, currentRecords, details) {
+    const meta = loadMeta();
+    meta.currentVersion += 1;
+
+    const version = meta.currentVersion;
+    const now = new Date().toISOString();
+
+    const stamped = currentRecords.map(r => ({
+      ...r,
+      _version: version,
+      _updatedAt: now
+    }));
+
+    const affectedIds = action === 'add' && details && details.ids
+      ? details.ids
+      : action === 'delete' && details && details.ids
+        ? details.ids
+        : action === 'edit' && details && details.ids
+          ? details.ids
+          : stamped.map(r => r.id);
+
+    const history = loadHistory();
+    history.push({
+      id: crypto.randomUUID(),
+      version,
+      timestamp: now,
+      action,
+      description: generateDescription(action, details),
+      affectedRecordIds: affectedIds,
+      snapshot: deepClone(stamped),
+      meta: details ? { ...details } : {}
+    });
+
+    saveHistory(history);
+    saveMeta(meta);
+    localStorage.setItem(key, JSON.stringify(stamped));
+
+    return { records: stamped, version, meta };
+  }
+
+  function rollback(historyId) {
+    const history = loadHistory();
+    const entry = history.find(h => h.id === historyId);
+    if (!entry) return { success: false, error: '历史记录不存在' };
+    if (!entry.snapshot) return { success: false, error: '快照数据丢失' };
+
+    const meta = loadMeta();
+    meta.currentVersion += 1;
+
+    const restoredSnapshot = deepClone(entry.snapshot);
+    const version = meta.currentVersion;
+    const now = new Date().toISOString();
+
+    const stamped = restoredSnapshot.map(r => ({
+      ...r,
+      _version: version,
+      _updatedAt: now
+    }));
+
+    history.push({
+      id: crypto.randomUUID(),
+      version,
+      timestamp: now,
+      action: 'rollback',
+      description: generateDescription('rollback', { toVersion: entry.version }),
+      affectedRecordIds: stamped.map(r => r.id),
+      snapshot: deepClone(stamped),
+      meta: { rollbackFromHistoryId: historyId, rollbackFromVersion: entry.version }
+    });
+
+    saveHistory(history);
+    saveMeta(meta);
+    localStorage.setItem(key, JSON.stringify(stamped));
+
+    return { success: true, records: stamped, version, rolledBackTo: entry };
+  }
+
+  function getHistory() {
+    return loadHistory().sort((a, b) => b.version - a.version);
+  }
+
+  function getCurrentVersion() {
+    return loadMeta().currentVersion;
+  }
+
+  function resetToSampleData() {
+    const meta = loadMeta();
+    meta.currentVersion += 1;
+    const version = meta.currentVersion;
+    const now = new Date().toISOString();
+
+    const seeded = deepClone(seed).map(r => ({
+      ...r,
+      _version: version,
+      _updatedAt: now
+    }));
+
+    const history = loadHistory();
+    history.push({
+      id: crypto.randomUUID(),
+      version,
+      timestamp: now,
+      action: 'reset',
+      description: generateDescription('reset'),
+      affectedRecordIds: seeded.map(r => r.id),
+      snapshot: deepClone(seeded),
+      meta: { recordCount: seeded.length }
+    });
+
+    saveHistory(history);
+    saveMeta(meta);
+    localStorage.setItem(key, JSON.stringify(seeded));
+
+    return { records: seeded, version };
+  }
+
+  return {
+    init,
+    recordChange,
+    rollback,
+    getHistory,
+    getCurrentVersion,
+    resetToSampleData,
+    SCHEMA_VERSION,
+    deepClone
+  };
+})();
+
+const vmInitResult = VersionManager.init();
+let records = vmInitResult.records;
 let editingId = null;
 let archiveFilter = '';
 let currentSections = [];
@@ -316,8 +582,13 @@ function endSession() {
 
   const hasDuplicateRecord = isDuplicate(item, records);
   if (!hasDuplicateRecord) {
-    records = [item, ...records];
-    save();
+    const newRecords = [item, ...records];
+    const result = VersionManager.recordChange('add', newRecords, {
+      count: 1,
+      names: [`${item.instrument} - ${item.piece} (${item.date})`],
+      ids: [item.id]
+    });
+    records = result.records;
   } else {
     alert('已存在相同练习记录，本次会话不会重复保存');
   }
@@ -723,6 +994,7 @@ document.querySelector('#app').innerHTML = `
       </div>
       <div class="heroButtons">
         <button id="sample">载入示例</button>
+        <button id="historyBtn" class="secondary">📜 历史版本</button>
         <button id="exportBtn" class="secondary">导出数据</button>
         <button id="importBtn" class="secondary">导入数据</button>
         <input type="file" id="importFile" accept=".json" hidden />
@@ -777,6 +1049,25 @@ document.querySelector('#app').innerHTML = `
         <div class="modalFoot">
           <button class="modalCancel" id="confirmCancel">取消</button>
           <button class="primary modalConfirm" id="confirmConfirm">确认</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="historyModal" class="modal" hidden>
+      <div class="modalOverlay"></div>
+      <div class="modalContent">
+        <div class="modalHead">
+          <div>
+            <h2>📜 数据版本历史</h2>
+            <span class="muted" id="historyCurrentVersion"></span>
+          </div>
+          <button class="modalClose" id="historyClose">×</button>
+        </div>
+        <div class="modalBody">
+          <div id="historyList"></div>
+        </div>
+        <div class="modalFoot">
+          <button class="modalCancel" id="historyCancelBtn">关闭</button>
         </div>
       </div>
     </div>
@@ -1007,11 +1298,18 @@ form.addEventListener('submit', (event) => {
     alert('已存在相同练习记录，请勿重复提交');
     return;
   }
-  records = editingId ? records.map((record) => (record.id === editingId ? item : record)) : [item, ...records];
+  const updatedRecords = editingId
+    ? records.map((record) => (record.id === editingId ? item : record))
+    : [item, ...records];
+  const action = editingId ? 'edit' : 'add';
+  const details = editingId
+    ? { name: `${item.instrument} - ${item.piece} (${item.date})`, ids: [item.id] }
+    : { count: 1, names: [`${item.instrument} - ${item.piece} (${item.date})`], ids: [item.id] };
+  const vmResult = VersionManager.recordChange(action, updatedRecords, details);
+  records = vmResult.records;
   editingId = null;
   currentSections = [];
   form.reset();
-  save();
   render();
 });
 document.querySelector('#addSectionBtn').addEventListener('click', () => addSection());
@@ -1025,9 +1323,11 @@ pieceFilter.addEventListener('change', () => {
   archiveFilter = '';
   render();
 });
-document.querySelector('#sample').addEventListener('click', () => {
-  records = seed;
-  save();
+document.querySelector('#sample').addEventListener('click', async () => {
+  const confirmed = await showConfirm('重置数据', '确定要重置为示例数据吗？当前所有记录将被清除，此操作可通过历史版本回滚。');
+  if (!confirmed) return;
+  const result = VersionManager.resetToSampleData();
+  records = result.records;
   render();
 });
 
@@ -1266,6 +1566,23 @@ function renderImportPreview(result) {
         <span class="summaryLabel">格式错误</span>
       </div>
     </div>
+    <div class="importModeSection">
+      <h3>导入模式</h3>
+      <label class="importModeOption">
+        <input type="radio" name="importMode" value="merge" checked />
+        <div>
+          <strong>合并导入</strong>
+          <span class="muted">将新记录追加到现有数据（推荐）</span>
+        </div>
+      </label>
+      <label class="importModeOption">
+        <input type="radio" name="importMode" value="overwrite" />
+        <div>
+          <strong>覆盖导入</strong>
+          <span class="muted">清除所有现有记录，仅保留导入数据。此操作可通过历史版本回滚。</span>
+        </div>
+      </label>
+    </div>
   `;
 
   if (allErrors.length > 0) {
@@ -1421,17 +1738,37 @@ importFile.addEventListener('change', async (e) => {
   }
 });
 
-modalConfirm.addEventListener('click', () => {
+modalConfirm.addEventListener('click', async () => {
   if (!pendingImportData || pendingImportData.newRecords.length === 0) return;
 
+  const modeEl = importPreview.querySelector('input[name="importMode"]:checked');
+  const mode = modeEl ? modeEl.value : 'merge';
   const newRecords = pendingImportData.newRecords.map(item => item.record);
-  records = [...newRecords, ...records];
-  save();
+
+  let finalRecords;
+  if (mode === 'overwrite') {
+    const confirmed = await showConfirm(
+      '覆盖导入确认',
+      `确定要用导入的 ${newRecords.length} 条记录覆盖所有现有 ${records.length} 条记录吗？\n此操作可通过历史版本回滚。`
+    );
+    if (!confirmed) return;
+    finalRecords = newRecords;
+  } else {
+    finalRecords = [...newRecords, ...records];
+  }
+
+  const result = VersionManager.recordChange('import', finalRecords, {
+    count: newRecords.length,
+    mode,
+    ids: newRecords.map(r => r.id)
+  });
+  records = result.records;
   render();
   closeImportModal();
 
   const count = newRecords.length;
-  alert(`成功导入 ${count} 条练习记录！`);
+  const modeText = mode === 'overwrite' ? '（覆盖模式）' : '';
+  alert(`成功导入 ${count} 条练习记录${modeText}！`);
 });
 
 function showPrompt(title, message, placeholder = '', defaultValue = '') {
@@ -1541,8 +1878,189 @@ function showConfirm(title, message) {
 }
 
 function save() {
+  console.warn('[Deprecation] save() is deprecated, use VersionManager.recordChange() instead');
   localStorage.setItem(key, JSON.stringify(records));
 }
+
+const historyModal = document.querySelector('#historyModal');
+const historyListEl = document.querySelector('#historyList');
+const historyBtn = document.querySelector('#historyBtn');
+const historyClose = document.querySelector('#historyClose');
+const historyCancelBtn = document.querySelector('#historyCancelBtn');
+const historyCurrentVersionEl = document.querySelector('#historyCurrentVersion');
+
+function getActionLabel(action) {
+  const labels = {
+    add: { text: '新增', icon: '➕', color: '#059669', bg: '#dcfce7' },
+    edit: { text: '编辑', icon: '✏️', color: '#d97706', bg: '#fef3c7' },
+    delete: { text: '删除', icon: '🗑️', color: '#dc2626', bg: '#fee2e2' },
+    import: { text: '导入', icon: '📥', color: '#0891b2', bg: '#cffafe' },
+    reset: { text: '重置', icon: '🔄', color: '#7c3aed', bg: '#ede9fe' },
+    rollback: { text: '回滚', icon: '⏪', color: '#0369a1', bg: '#dbeafe' },
+    migrate: { text: '迁移', icon: '⬆️', color: '#6b7280', bg: '#f3f4f6' }
+  };
+  return labels[action] || { text: '未知', icon: '❓', color: '#6b7280', bg: '#f3f4f6' };
+}
+
+function formatTime(isoString) {
+  const d = new Date(isoString);
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+}
+
+function renderHistory() {
+  const history = VersionManager.getHistory();
+  const currentVersion = VersionManager.getCurrentVersion();
+  historyCurrentVersionEl.textContent = `当前版本：v${currentVersion} · 共 ${history.length} 条历史记录`;
+
+  if (history.length === 0) {
+    historyListEl.innerHTML = `
+      <div class="historyEmpty">
+        <p class="muted">暂无历史记录</p>
+      </div>
+    `;
+    return;
+  }
+
+  historyListEl.innerHTML = history.map((entry) => {
+    const action = getActionLabel(entry.action);
+    const isCurrent = entry.version === currentVersion;
+    const snapshotCount = entry.snapshot ? entry.snapshot.length : 0;
+    const rollbackInfo = entry.action === 'rollback' && entry.meta && entry.meta.rollbackFromVersion
+      ? `<span class="historyMetaTag historyRollback">从 v${entry.meta.rollbackFromVersion} 回滚</span>`
+      : '';
+    const importInfo = entry.action === 'import' && entry.meta && entry.meta.mode === 'overwrite'
+      ? `<span class="historyMetaTag historyOverwrite">覆盖模式</span>`
+      : '';
+
+    return `
+      <div class="historyItem ${isCurrent ? 'current' : ''}" data-history-id="${entry.id}">
+        <div class="historyItemHead">
+          <div class="historyBadge" style="background: ${action.bg}; color: ${action.color}">
+            <span class="historyIcon">${action.icon}</span>
+            <span>${action.text}</span>
+          </div>
+          <div class="historyVersion">
+            <strong>v${entry.version}</strong>
+            ${isCurrent ? '<span class="historyCurrentTag">当前</span>' : ''}
+          </div>
+        </div>
+        <div class="historyItemBody">
+          <p class="historyDesc">${escapeHtml(entry.description)}</p>
+          <div class="historyMeta">
+            <span class="historyMetaItem">🕐 ${formatTime(entry.timestamp)}</span>
+            <span class="historyMetaItem">📊 ${snapshotCount} 条记录</span>
+            <span class="historyMetaItem">🎯 影响 ${entry.affectedRecordIds.length} 条</span>
+            ${rollbackInfo}
+            ${importInfo}
+          </div>
+        </div>
+        <div class="historyItemActions">
+          ${!isCurrent ? `<button class="primary small" data-rollback="${entry.id}">⏪ 回滚到此版本</button>` : ''}
+          <button class="secondary small" data-preview="${entry.id}">👁 预览</button>
+        </div>
+        <div class="historyPreview" data-preview-panel="${entry.id}" hidden></div>
+      </div>
+    `;
+  }).join('');
+
+  historyListEl.querySelectorAll('[data-rollback]').forEach((btn) => {
+    btn.addEventListener('click', async (e) => {
+      const historyId = e.currentTarget.dataset.rollback;
+      const entry = history.find((h) => h.id === historyId);
+      if (!entry) return;
+
+      const confirmed = await showConfirm(
+        '回滚确认',
+        `确定要回滚到版本 v${entry.version} 吗？\n\n操作：${entry.description}\n时间：${formatTime(entry.timestamp)}\n\n此操作会生成一条新的历史记录，可以再次回滚。`
+      );
+      if (!confirmed) return;
+
+      const result = VersionManager.rollback(historyId);
+      if (result.success) {
+        records = result.records;
+        renderHistory();
+        render();
+        alert(`已成功回滚到版本 v${entry.version}！\n图表和数据已重新计算。`);
+      } else {
+        alert(`回滚失败：${result.error || '未知错误'}`);
+      }
+    });
+  });
+
+  historyListEl.querySelectorAll('[data-preview]').forEach((btn) => {
+    btn.addEventListener('click', (e) => {
+      const historyId = e.currentTarget.dataset.preview;
+      const panel = historyListEl.querySelector(`[data-preview-panel="${historyId}"]`);
+      if (!panel) return;
+
+      if (panel.hidden) {
+        const entry = history.find((h) => h.id === historyId);
+        if (entry && entry.snapshot) {
+          panel.innerHTML = renderHistorySnapshotPreview(entry.snapshot);
+        }
+        panel.hidden = false;
+        e.currentTarget.textContent = '🙈 收起';
+      } else {
+        panel.hidden = true;
+        panel.innerHTML = '';
+        e.currentTarget.textContent = '👁 预览';
+      }
+    });
+  });
+}
+
+function renderHistorySnapshotPreview(snapshot) {
+  if (!snapshot || snapshot.length === 0) {
+    return '<div class="historyPreviewEmpty"><p class="muted">该版本无记录</p></div>';
+  }
+
+  return `
+    <div class="historyPreviewHeader">该版本包含 ${snapshot.length} 条记录：</div>
+    <div class="tableWrap">
+      <table class="previewTable">
+        <thead>
+          <tr>
+            <th>日期</th>
+            <th>乐器</th>
+            <th>曲目</th>
+            <th>BPM</th>
+            <th>时长</th>
+            <th>错误</th>
+            <th>备注</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${snapshot.slice().sort((a, b) => b.date.localeCompare(a.date)).map((r) => `
+            <tr>
+              <td>${escapeHtml(r.date)}</td>
+              <td>${escapeHtml(r.instrument)}</td>
+              <td>${escapeHtml(r.piece)}</td>
+              <td>${r.bpm}</td>
+              <td>${r.minutes}min</td>
+              <td>${r.mistakes}</td>
+              <td>${r.note ? escapeHtml(r.note) : '-'}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+function openHistoryModal() {
+  renderHistory();
+  historyModal.hidden = false;
+}
+
+function closeHistoryModal() {
+  historyModal.hidden = true;
+}
+
+historyBtn.addEventListener('click', openHistoryModal);
+historyClose.addEventListener('click', closeHistoryModal);
+historyCancelBtn.addEventListener('click', closeHistoryModal);
+historyModal.querySelector('.modalOverlay').addEventListener('click', closeHistoryModal);
 
 function renderFilterPanel() {
   const instruments = [...new Set(records.map((record) => record.instrument))].sort();
@@ -1756,9 +2274,18 @@ function render() {
     `;
   }).join('');
 
-  document.querySelectorAll('[data-del]').forEach((button) => button.addEventListener('click', () => {
-    records = records.filter((record) => record.id !== button.dataset.del);
-    save();
+  document.querySelectorAll('[data-del]').forEach((button) => button.addEventListener('click', async () => {
+    const recordId = button.dataset.del;
+    const record = records.find((r) => r.id === recordId);
+    if (!record) return;
+    const confirmed = await showConfirm('删除记录', `确定要删除这条记录吗？\n${record.instrument} - ${record.piece} (${record.date})\n此操作可通过历史版本回滚。`);
+    if (!confirmed) return;
+    const filtered = records.filter((r) => r.id !== recordId);
+    const result = VersionManager.recordChange('delete', filtered, {
+      name: `${record.instrument} - ${record.piece} (${record.date})`,
+      ids: [recordId]
+    });
+    records = result.records;
     render();
   }));
 

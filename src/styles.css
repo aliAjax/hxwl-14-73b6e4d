@@ -1675,3 +1675,205 @@ td button { margin-left: 6px; background: #dff3ef; }
     grid-template-columns: repeat(2, 1fr);
   }
 }
+
+.importModeSection {
+  margin-bottom: 24px;
+  padding: 16px;
+  background: #f6faf8;
+  border: 1px solid #e4efec;
+  border-radius: 8px;
+}
+
+.importModeSection h3 {
+  margin: 0 0 12px 0;
+  font-size: 15px;
+  color: #172522;
+}
+
+.importModeOption {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  background: white;
+  border: 1px solid #cfe2de;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  margin-bottom: 8px;
+}
+
+.importModeOption:last-child {
+  margin-bottom: 0;
+}
+
+.importModeOption:hover {
+  border-color: #0f766e;
+  background: #f0fdfa;
+}
+
+.importModeOption input[type="radio"] {
+  width: auto;
+  margin-top: 3px;
+  cursor: pointer;
+}
+
+.importModeOption strong {
+  display: block;
+  color: #172522;
+  font-size: 14px;
+  margin-bottom: 2px;
+}
+
+.importModeOption .muted {
+  font-size: 12px;
+}
+
+.historyEmpty {
+  text-align: center;
+  padding: 40px 20px;
+}
+
+.historyItem {
+  border: 1px solid #e4efec;
+  border-radius: 10px;
+  background: #fbfefc;
+  padding: 16px;
+  margin-bottom: 12px;
+  transition: all 0.2s ease;
+}
+
+.historyItem:hover {
+  border-color: #a7c9c2;
+  box-shadow: 0 4px 12px rgba(23, 61, 55, 0.06);
+}
+
+.historyItem.current {
+  border-color: #0f766e;
+  background: linear-gradient(135deg, #f0fdfa 0%, #ecfeff 100%);
+  border-width: 2px;
+}
+
+.historyItemHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+  gap: 12px;
+}
+
+.historyBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.historyIcon {
+  font-size: 14px;
+}
+
+.historyVersion {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.historyVersion strong {
+  font-size: 16px;
+  color: #172522;
+  font-family: 'SF Mono', Monaco, monospace;
+}
+
+.historyCurrentTag {
+  padding: 2px 10px;
+  background: #0f766e;
+  color: white;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.historyItemBody {
+  margin-bottom: 12px;
+}
+
+.historyDesc {
+  margin: 0 0 8px 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: #172522;
+  line-height: 1.5;
+}
+
+.historyMeta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.historyMetaItem {
+  color: #60736f;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.historyMetaTag {
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.historyRollback {
+  background: #dbeafe;
+  color: #0369a1;
+}
+
+.historyOverwrite {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.historyItemActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px dashed #cfe2de;
+}
+
+.historyPreview {
+  margin-top: 12px;
+  padding: 12px;
+  background: #f6faf8;
+  border-radius: 8px;
+  border: 1px solid #e4efec;
+  animation: fadeIn 0.2s ease;
+}
+
+.historyPreviewHeader {
+  font-size: 13px;
+  font-weight: 600;
+  color: #172522;
+  margin-bottom: 10px;
+}
+
+.historyPreviewEmpty {
+  text-align: center;
+  padding: 12px;
+}
+
+.modalHead .muted {
+  font-size: 12px;
+  margin-top: 2px;
+  display: block;
+}
+
+#historyModal .modalContent {
+  max-width: 960px;
+}
