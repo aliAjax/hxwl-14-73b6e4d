@@ -1485,6 +1485,23 @@ document.querySelector('#app').innerHTML = `
       <div id="suggestionConservative" class="suggestionConservative"></div>
     </section>
 
+    <section class="panel reportPanel">
+      <div class="panelHead">
+        <div>
+          <h2>📋 周/月复盘报告</h2>
+          <span class="muted" id="reportRangeLabel"></span>
+        </div>
+        <div class="reportActions">
+          <div class="reportRangeToggle">
+            <button class="rangeBtn active" data-range="week" id="rangeWeekBtn">周报</button>
+            <button class="rangeBtn" data-range="month" id="rangeMonthBtn">月报</button>
+          </div>
+          <button class="secondary small" id="exportReportBtn">📥 导出 HTML</button>
+        </div>
+      </div>
+      <div id="reportContent" class="reportContent"></div>
+    </section>
+
     <section class="layout">
       <form id="form" class="panel">
         <h2>练习记录</h2>
@@ -3045,6 +3062,264 @@ function render() {
   renderGoals();
   renderGoalDashboard();
   renderLibrary();
+  renderReport();
+}
+
+function renderReport() {
+  const report = ReportManager.generateReport(reportRange);
+  const { summary, planCompletion, overdueGoals, recommendedSections, goalsProgress, trackArchive, rangeLabel, dailyRecords } = report;
+  const rangeLabelEl = document.querySelector('#reportRangeLabel');
+  const contentEl = document.querySelector('#reportContent');
+  const weekBtn = document.querySelector('#rangeWeekBtn');
+  const monthBtn = document.querySelector('#rangeMonthBtn');
+  const exportBtn = document.querySelector('#exportReportBtn');
+
+  rangeLabelEl.textContent = rangeLabel;
+
+  if (weekBtn) {
+    weekBtn.className = `rangeBtn ${reportRange === 'week' ? 'active' : ''}`;
+    weekBtn.onclick = () => { reportRange = 'week'; render(); };
+  }
+  if (monthBtn) {
+    monthBtn.className = `rangeBtn ${reportRange === 'month' ? 'active' : ''}`;
+    monthBtn.onclick = () => { reportRange = 'month'; render(); };
+  }
+  if (exportBtn) {
+    exportBtn.onclick = () => ReportManager.exportReport(reportRange);
+  }
+
+  const minutesChangeColor = summary.minutesChange >= 0 ? '#059669' : '#dc2626';
+  const minutesChangeText = summary.minutesChange >= 0 ? `+${summary.minutesChange}` : summary.minutesChange;
+  const minutesChangeIcon = summary.minutesChange >= 0 ? '↑' : '↓';
+  const pieceChangeColor = summary.pieceChange >= 0 ? '#059669' : '#dc2626';
+  const pieceChangeText = summary.pieceChange >= 0 ? `+${summary.pieceChange}` : summary.pieceChange;
+  const pieceChangeIcon = summary.pieceChange >= 0 ? '↑' : '↓';
+  const bpmGainColor = summary.bpmStats.gain >= 0 ? '#059669' : '#dc2626';
+  const bpmGainText = summary.bpmStats.gain >= 0 ? `+${summary.bpmStats.gain}` : summary.bpmStats.gain;
+  const bpmGainIcon = summary.bpmStats.gain >= 0 ? '↑' : '↓';
+  const mistakeTrendColor = summary.mistakesStats.trend <= 0 ? '#059669' : '#dc2626';
+  const mistakeTrendText = summary.mistakesStats.trend <= 0 ? (summary.mistakesStats.trend === 0 ? '0' : `${summary.mistakesStats.trend}`) : `+${summary.mistakesStats.trend}`;
+  const mistakeTrendIcon = summary.mistakesStats.trend <= 0 ? (summary.mistakesStats.trend === 0 ? '→' : '↓') : '↑';
+  const prevLabel = reportRange === 'week' ? '上周' : '上月';
+
+  if (!summary.recordCount && !goalsProgress.length && !planCompletion.totalTasks) {
+    contentEl.innerHTML = `
+      <div class="reportEmpty">
+        <span class="reportEmptyIcon">📊</span>
+        <h3 class="reportEmptyTitle">暂无复盘数据</h3>
+        <p class="reportEmptyDesc">添加练习记录、设置目标或今日计划后，这里将自动生成${reportRange === 'week' ? '周' : '月'}度复盘报告。</p>
+      </div>
+    `;
+    return;
+  }
+
+  contentEl.innerHTML = `
+    <div class="reportStats">
+      <div class="reportStat">
+        <span class="reportStatLabel">总练习时长</span>
+        <strong class="reportStatValue">${summary.totalMinutes}<small>min</small></strong>
+        <span class="reportStatChange" style="color:${minutesChangeColor};">${minutesChangeIcon} ${minutesChangeText} vs ${prevLabel}</span>
+      </div>
+      <div class="reportStat">
+        <span class="reportStatLabel">曲目覆盖数</span>
+        <strong class="reportStatValue">${summary.pieceCount}<small>首</small></strong>
+        <span class="reportStatChange" style="color:${pieceChangeColor};">${pieceChangeIcon} ${pieceChangeText} vs ${prevLabel}</span>
+      </div>
+      <div class="reportStat">
+        <span class="reportStatLabel">平均 BPM</span>
+        <strong class="reportStatValue">${summary.bpmStats.avg}</strong>
+        <span class="reportStatChange" style="color:${bpmGainColor};">${bpmGainIcon} ${bpmGainText} BPM</span>
+      </div>
+      <div class="reportStat">
+        <span class="reportStatLabel">错误次数趋势</span>
+        <strong class="reportStatValue">${summary.mistakesStats.avg}<small>次/次</small></strong>
+        <span class="reportStatChange" style="color:${mistakeTrendColor};">${mistakeTrendIcon} ${mistakeTrendText} 次</span>
+      </div>
+      <div class="reportStat">
+        <span class="reportStatLabel">练习天数</span>
+        <strong class="reportStatValue">${summary.activeDays}<small>天</small></strong>
+      </div>
+      <div class="reportStat">
+        <span class="reportStatLabel">练习记录</span>
+        <strong class="reportStatValue">${summary.recordCount}<small>条</small></strong>
+      </div>
+    </div>
+
+    ${dailyRecords.length ? `
+    <div class="reportSection">
+      <h3 class="reportSectionTitle">📅 每日练习时长</h3>
+      <div class="reportChart">
+        ${drawBarsInline(dailyRecords, 'min', '#d97706')}
+      </div>
+    </div>
+    ` : ''}
+
+    <div class="reportSection">
+      <h3 class="reportSectionTitle">✅ 计划完成情况</h3>
+      <div class="reportPlanCard">
+        <div class="reportPlanHead">
+          <div>
+            <div class="reportPlanTitle">任务完成率</div>
+            <div class="reportPlanMeta">
+              <span>已完成: <strong>${planCompletion.completedTasks}</strong> / ${planCompletion.totalTasks} 个任务</span>
+              <span>预计总时长: <strong>${planCompletion.totalEstimatedMinutes}min</strong></span>
+            </div>
+          </div>
+          <div class="reportPlanPercent">${planCompletion.completionRate}%</div>
+        </div>
+        <div class="reportPlanBar"><div class="reportPlanFill" style="width:${planCompletion.completionRate}%;"></div></div>
+        ${planCompletion.dailyStats.length ? `
+        <div class="reportPlanDaily">
+          ${planCompletion.dailyStats.map(d => `
+            <div class="reportPlanDay">
+              <span class="reportPlanDayDate">${d.date.slice(5)}</span>
+              <span class="reportPlanDayInfo">完成 <strong>${d.completed}</strong>/${d.total} · ${d.minutes}min</span>
+            </div>
+          `).join('')}
+        </div>
+        ` : ''}
+      </div>
+    </div>
+
+    ${goalsProgress.length ? `
+    <div class="reportSection">
+      <h3 class="reportSectionTitle">🎯 目标进度</h3>
+      <div class="reportGoals">
+        ${goalsProgress.map(g => {
+          const isOverdue = g.progress.isOverdue && !g.progress.isAchieved;
+          const isAchieved = g.progress.isAchieved || g.achieved;
+          return `
+          <div class="reportGoalCard ${isOverdue ? 'overdue' : ''} ${isAchieved ? 'achieved' : ''}">
+            <div class="reportGoalHead">
+              <div class="reportGoalTitle">${escapeHtml(g.piece)}</div>
+              <span class="reportGoalTag" style="background:${g.pieceType.color};">${g.pieceType.icon} ${g.pieceType.type}</span>
+            </div>
+            <div class="reportGoalMeta">
+              <span>目标: <strong>${g.targetBpm}</strong> BPM</span>
+              <span>当前: <strong>${g.progress.currentBpm}</strong> BPM</span>
+              <span>截止: <strong>${g.targetDate}</strong></span>
+            </div>
+            <div class="reportGoalProgress">
+              <div class="reportGoalProgRow">
+                <span>BPM ${g.progress.bpmProgress}%</span>
+                <div class="reportGoalProgBar"><div class="reportGoalProgFill bpm" style="width:${g.progress.bpmProgress}%;"></div></div>
+              </div>
+              <div class="reportGoalProgRow">
+                <span>本周 ${g.progress.weeklyProgress}%</span>
+                <div class="reportGoalProgBar"><div class="reportGoalProgFill weekly" style="width:${g.progress.weeklyProgress}%;"></div></div>
+              </div>
+            </div>
+            ${isOverdue ? `<div class="reportGoalAlert overdue">⚠ 已逾期 ${Math.abs(g.progress.daysRemaining)} 天</div>` : ''}
+            ${isAchieved ? `<div class="reportGoalAlert achieved">✓ 已达成</div>` : ''}
+          </div>
+          `;
+        }).join('')}
+      </div>
+    </div>
+    ` : ''}
+
+    ${overdueGoals.length ? `
+    <div class="reportSection">
+      <h3 class="reportSectionTitle overdue">⚠ 逾期目标 (${overdueGoals.length})</h3>
+      <div class="reportOverdueList">
+        ${overdueGoals.map(g => `
+        <div class="reportOverdueItem">
+          <div class="reportOverdueTitle">${escapeHtml(g.piece)}</div>
+          <div class="reportOverdueMeta">
+            <span>目标: <strong>${g.targetBpm} BPM</strong></span>
+            <span>当前: <strong>${g.progress.currentBpm} BPM</strong></span>
+            <span>逾期: <strong style="color:#dc2626;">${Math.abs(g.progress.daysRemaining)} 天</strong></span>
+          </div>
+        </div>
+        `).join('')}
+      </div>
+    </div>
+    ` : ''}
+
+    <div class="reportSection">
+      <h3 class="reportSectionTitle">🔥 最值得继续练的片段</h3>
+      ${recommendedSections.length ? `
+      <div class="reportSectionsList">
+        ${recommendedSections.map(s => {
+          const masteryColor = getMasteryColor(s.latestMastery);
+          return `
+          <div class="reportSectionCard">
+            <div class="reportSectionHead">
+              <div>
+                <div class="reportSectionName">${escapeHtml(s.piece)} · ${escapeHtml(s.name)}</div>
+                <div class="reportSectionMeta">
+                  <span>${escapeHtml(s.instrument)}</span>
+                  <span>练习 <strong>${s.practiceCount}</strong> 次</span>
+                </div>
+              </div>
+              <span class="reportMasteryBadge" style="background:${masteryColor};">${getMasteryLabel(s.latestMastery)}</span>
+            </div>
+            <div class="reportSectionStats">
+              <div class="reportSectionStat">
+                <span>当前 BPM</span>
+                <strong>${s.latestBpm} <small style="color:${s.bpmGain >= 0 ? '#059669' : '#dc2626'};">(${s.bpmGain >= 0 ? '+' : ''}${s.bpmGain})</small></strong>
+              </div>
+              <div class="reportSectionStat">
+                <span>错误次数</span>
+                <strong>${s.latestMistakes} <small style="color:${s.mistakeTrend <= 0 ? '#059669' : '#dc2626'};">(${s.mistakeTrend <= 0 ? (s.mistakeTrend === 0 ? '0' : s.mistakeTrend) : '+' + s.mistakeTrend})</small></strong>
+              </div>
+              <div class="reportSectionStat">
+                <span>掌握程度</span>
+                <strong style="color:${masteryColor};">${s.latestMastery}/5</strong>
+              </div>
+            </div>
+          </div>
+          `;
+        }).join('')}
+      </div>
+      ` : `
+      <div class="reportEmpty small">
+        <p class="muted" style="margin:0;text-align:center;">💡 本期暂无分段练习数据，添加练习记录时可拆分片段进行精细化复盘</p>
+      </div>
+      `}
+    </div>
+
+    ${trackArchive.length ? `
+    <div class="reportSection">
+      <h3 class="reportSectionTitle">📚 曲目档案</h3>
+      <div class="reportTracks">
+        ${trackArchive.map(t => {
+          const mistakeColor = t.mistakeTrend < 0 ? '#059669' : t.mistakeTrend > 0 ? '#dc2626' : '#60736f';
+          const mistakeText = t.mistakeTrend < 0 ? `↓ ${Math.abs(t.mistakeTrend)}` : t.mistakeTrend > 0 ? `↑ ${t.mistakeTrend}` : '—';
+          return `
+          <div class="reportTrackCard">
+            <div class="reportTrackHead">
+              <div class="reportTrackName">${escapeHtml(t.piece)}</div>
+              <span class="muted">${escapeHtml(t.instrument)} · ${t.practiceCount} 次</span>
+            </div>
+            <div class="reportTrackStats">
+              <span>最高 BPM: <strong>${t.maxBpm}</strong></span>
+              <span>累计: <strong>${t.totalMinutes}min</strong></span>
+              <span>最近: <strong>${t.lastDate}</strong></span>
+              <span>错误趋势: <strong style="color:${mistakeColor};">${mistakeText}</strong></span>
+            </div>
+          </div>
+          `;
+        }).join('')}
+      </div>
+    </div>
+    ` : ''}
+  `;
+}
+
+function drawBarsInline(data, unit, color) {
+  if (!data.length) return '';
+  const max = Math.max(...data.map((item) => item.value), 1);
+  return `<svg viewBox="0 0 500 160" style="width:100%;min-height:140px;">${data.map((item, index) => {
+    const barWidth = Math.min(60, 440 / Math.max(data.length, 1));
+    const gap = Math.max(8, (500 - barWidth * data.length) / (data.length + 1));
+    const x = gap + index * (barWidth + gap * 0.5);
+    const barHeight = (item.value / max) * 100;
+    const y = 130 - barHeight;
+    return `<rect x="${x}" y="${y}" width="${barWidth}" height="${barHeight}" rx="4" fill="${color}"/>
+<text x="${x + barWidth / 2}" y="${y - 6}" fill="#172522" font-size="11" font-weight="600" text-anchor="middle">${item.value}${unit}</text>
+<text x="${x + barWidth / 2}" y="150" fill="#60736f" font-size="11" text-anchor="middle">${item.label}</text>`;
+  }).join('')}</svg>`;
 }
 
 function renderArchive() {
@@ -3925,6 +4200,639 @@ function drawBars(selector, data, unit, color) {
   const max = Math.max(...data.map((item) => item.value), 1);
   el.innerHTML = `<svg viewBox="0 0 500 220">${data.map((item, index) => `<rect x="${48 + index * 86}" y="${180 - (item.value / max) * 140}" width="34" height="${(item.value / max) * 140}" rx="5" fill="${color}"/><text x="${65 + index * 86}" y="${168 - (item.value / max) * 140}">${item.value}${unit}</text><text x="${65 + index * 86}" y="205">${item.label}</text>`).join('')}</svg>`;
 }
+
+const ReportManager = (() => {
+  function getMonthRange(date = new Date()) {
+    const d = new Date(date);
+    const start = new Date(d.getFullYear(), d.getMonth(), 1);
+    start.setHours(0, 0, 0, 0);
+    const end = new Date(d.getFullYear(), d.getMonth() + 1, 0);
+    end.setHours(23, 59, 59, 999);
+    return { start, end };
+  }
+
+  function formatDateKey(date) {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+
+  function getDateRange(rangeType) {
+    const today = new Date();
+    if (rangeType === 'week') {
+      return getWeekRange(today);
+    }
+    return getMonthRange(today);
+  }
+
+  function getRecordsInRange(recordsList, rangeType) {
+    const { start, end } = getDateRange(rangeType);
+    const startStr = formatDateKey(start);
+    const endStr = formatDateKey(end);
+    return recordsList.filter(r => r.date >= startStr && r.date <= endStr);
+  }
+
+  function getPrevRange(rangeType) {
+    const today = new Date();
+    if (rangeType === 'week') {
+      const prevWeek = new Date(today);
+      prevWeek.setDate(prevWeek.getDate() - 7);
+      return getWeekRange(prevWeek);
+    }
+    const prevMonth = new Date(today);
+    prevMonth.setMonth(prevMonth.getMonth() - 1);
+    return getMonthRange(prevMonth);
+  }
+
+  function calcTotalMinutes(recordsList) {
+    return recordsList.reduce((sum, r) => sum + r.minutes, 0);
+  }
+
+  function calcUniquePieces(recordsList) {
+    return [...new Set(recordsList.map(r => r.piece))].length;
+  }
+
+  function calcBpmStats(recordsList, rangeType) {
+    if (!recordsList.length) return { avg: 0, gain: 0, max: 0, min: 0 };
+    const sorted = [...recordsList].sort((a, b) => a.date.localeCompare(b.date));
+    const bpms = sorted.map(r => r.bpm);
+    const avgVal = Math.round(avg(bpms));
+    const max = Math.max(...bpms);
+    const min = Math.min(...bpms);
+    const gain = bpms.length >= 2 ? bpms[bpms.length - 1] - bpms[0] : 0;
+    return { avg: avgVal, gain, max, min };
+  }
+
+  function calcMistakesStats(recordsList) {
+    if (!recordsList.length) return { total: 0, avg: 0, trend: 0 };
+    const sorted = [...recordsList].sort((a, b) => a.date.localeCompare(b.date));
+    const mistakes = sorted.map(r => r.mistakes);
+    const total = mistakes.reduce((sum, m) => sum + m, 0);
+    const avgVal = Math.round(avg(mistakes));
+    const trend = mistakes.length >= 2 ? mistakes[mistakes.length - 1] - mistakes[0] : 0;
+    return { total, avg: avgVal, trend };
+  }
+
+  function getOverdueGoals(goalsList, recordsList) {
+    return goalsList.filter(g => {
+      if (g.achieved) return false;
+      const progress = calculateGoalProgress(g);
+      return progress.isOverdue;
+    }).map(g => ({
+      ...g,
+      progress: calculateGoalProgress(g),
+      pieceType: SuggestionEngine.classifyPieceType(g.piece)
+    }));
+  }
+
+  function getRecommendedSections(recordsList, topN = 5) {
+    const allSections = [];
+    recordsList.forEach(record => {
+      const sections = getSections(record);
+      sections.forEach(s => {
+        allSections.push({
+          ...s,
+          date: record.date,
+          piece: record.piece,
+          instrument: record.instrument
+        });
+      });
+    });
+
+    if (!allSections.length) return [];
+
+    const sectionMap = new Map();
+    allSections.forEach(s => {
+      const key = `${s.piece}||${s.name}`;
+      if (!sectionMap.has(key)) {
+        sectionMap.set(key, {
+          piece: s.piece,
+          name: s.name,
+          instrument: s.instrument,
+          records: [],
+          bpmHistory: [],
+          mistakesHistory: [],
+          masteryHistory: []
+        });
+      }
+      const stat = sectionMap.get(key);
+      stat.records.push(s);
+      stat.bpmHistory.push({ date: s.date, value: s.bpm });
+      stat.mistakesHistory.push({ date: s.date, value: s.mistakes });
+      stat.masteryHistory.push({ date: s.date, value: s.mastery });
+    });
+
+    return [...sectionMap.values()].map(stat => {
+      const sortedBpm = stat.bpmHistory.sort((a, b) => a.date.localeCompare(b.date));
+      const sortedMistakes = stat.mistakesHistory.sort((a, b) => a.date.localeCompare(b.date));
+      const sortedMastery = stat.masteryHistory.sort((a, b) => a.date.localeCompare(b.date));
+      const latestBpm = sortedBpm.length ? sortedBpm[sortedBpm.length - 1].value : 0;
+      const latestMistakes = sortedMistakes.length ? sortedMistakes[sortedMistakes.length - 1].value : 0;
+      const latestMastery = sortedMastery.length ? sortedMastery[sortedMastery.length - 1].value : 0;
+      const bpmGain = sortedBpm.length >= 2 ? sortedBpm[sortedBpm.length - 1].value - sortedBpm[0].value : 0;
+      const mistakeTrend = sortedMistakes.length >= 2 ? sortedMistakes[sortedMistakes.length - 1].value - sortedMistakes[0].value : 0;
+
+      let priorityScore = 0;
+      if (latestMastery <= 2) priorityScore += 3;
+      else if (latestMastery === 3) priorityScore += 1;
+      if (mistakeTrend > 0) priorityScore += 2;
+      if (latestMistakes >= 5) priorityScore += 2;
+      if (bpmGain >= 0) priorityScore += 1;
+      priorityScore += stat.records.length * 0.3;
+
+      return {
+        ...stat,
+        latestBpm,
+        latestMistakes,
+        latestMastery,
+        bpmGain,
+        mistakeTrend,
+        priorityScore,
+        practiceCount: stat.records.length
+      };
+    }).sort((a, b) => b.priorityScore - a.priorityScore).slice(0, topN);
+  }
+
+  function getPlanCompletion(rangeType) {
+    const planData = JSON.parse(localStorage.getItem(planKey) || 'null') || {};
+    const { start, end } = getDateRange(rangeType);
+    const startStr = formatDateKey(start);
+    const endStr = formatDateKey(end);
+
+    let totalTasks = 0;
+    let completedTasks = 0;
+    let totalEstimatedMinutes = 0;
+    const dailyStats = [];
+
+    Object.entries(planData).forEach(([date, tasks]) => {
+      if (date >= startStr && date <= endStr && Array.isArray(tasks)) {
+        const dayTotal = tasks.length;
+        const dayCompleted = tasks.filter(t => t.completed).length;
+        const dayMinutes = tasks.reduce((sum, t) => sum + (t.estimatedMinutes || 0), 0);
+        totalTasks += dayTotal;
+        completedTasks += dayCompleted;
+        totalEstimatedMinutes += dayMinutes;
+        dailyStats.push({ date, total: dayTotal, completed: dayCompleted, minutes: dayMinutes });
+      }
+    });
+
+    const completionRate = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
+    return { totalTasks, completedTasks, completionRate, totalEstimatedMinutes, dailyStats };
+  }
+
+  function getGoalsProgress(goalsList, recordsList, rangeType) {
+    return goalsList.map(g => ({
+      ...g,
+      progress: calculateGoalProgress(g),
+      pieceType: SuggestionEngine.classifyPieceType(g.piece)
+    }));
+  }
+
+  function getTrackArchiveInRange(recordsList, rangeType) {
+    const trackStats = getTrackStats();
+    const pieceSet = new Set(recordsList.map(r => r.piece));
+    return trackStats.filter(t => pieceSet.has(t.piece));
+  }
+
+  function generateReport(rangeType) {
+    const recordsInRange = getRecordsInRange(records, rangeType);
+    const { start, end } = getDateRange(rangeType);
+    const prevRange = getPrevRange(rangeType);
+    const prevStartStr = formatDateKey(prevRange.start);
+    const prevEndStr = formatDateKey(prevRange.end);
+    const prevRecords = records.filter(r => r.date >= prevStartStr && r.date <= prevEndStr);
+
+    const totalMinutes = calcTotalMinutes(recordsInRange);
+    const prevMinutes = calcTotalMinutes(prevRecords);
+    const minutesChange = totalMinutes - prevMinutes;
+
+    const pieceCount = calcUniquePieces(recordsInRange);
+    const prevPieceCount = calcUniquePieces(prevRecords);
+    const pieceChange = pieceCount - prevPieceCount;
+
+    const bpmStats = calcBpmStats(recordsInRange, rangeType);
+    const mistakesStats = calcMistakesStats(recordsInRange);
+
+    const overdueGoals = getOverdueGoals(goals, records);
+    const recommendedSections = getRecommendedSections(recordsInRange);
+    const planCompletion = getPlanCompletion(rangeType);
+    const goalsProgress = getGoalsProgress(goals, records, rangeType);
+    const trackArchive = getTrackArchiveInRange(recordsInRange, rangeType);
+
+    const rangeLabel = rangeType === 'week'
+      ? `${formatDateKey(start)} ~ ${formatDateKey(end)}`
+      : `${start.getFullYear()}年${start.getMonth() + 1}月`;
+
+    return {
+      rangeType,
+      rangeLabel,
+      startDate: formatDateKey(start),
+      endDate: formatDateKey(end),
+      generatedAt: new Date().toISOString(),
+      summary: {
+        totalMinutes,
+        prevMinutes,
+        minutesChange,
+        pieceCount,
+        prevPieceCount,
+        pieceChange,
+        bpmStats,
+        mistakesStats,
+        recordCount: recordsInRange.length,
+        activeDays: new Set(recordsInRange.map(r => r.date)).size
+      },
+      planCompletion,
+      goalsProgress,
+      overdueGoals,
+      recommendedSections,
+      trackArchive,
+      dailyRecords: groupDay(recordsInRange, 'minutes')
+    };
+  }
+
+  function buildExportHtml(report) {
+    const { rangeType, rangeLabel, summary, planCompletion, overdueGoals, recommendedSections, goalsProgress, trackArchive, generatedAt } = report;
+    const typeLabel = rangeType === 'week' ? '周报' : '月报';
+
+    const minutesChangeColor = summary.minutesChange >= 0 ? '#059669' : '#dc2626';
+    const minutesChangeText = summary.minutesChange >= 0 ? `+${summary.minutesChange}` : summary.minutesChange;
+    const pieceChangeColor = summary.pieceChange >= 0 ? '#059669' : '#dc2626';
+    const pieceChangeText = summary.pieceChange >= 0 ? `+${summary.pieceChange}` : summary.pieceChange;
+    const bpmGainColor = summary.bpmStats.gain >= 0 ? '#059669' : '#dc2626';
+    const bpmGainText = summary.bpmStats.gain >= 0 ? `+${summary.bpmStats.gain}` : summary.bpmStats.gain;
+    const mistakeTrendColor = summary.mistakesStats.trend <= 0 ? '#059669' : '#dc2626';
+    const mistakeTrendText = summary.mistakesStats.trend <= 0 ? (summary.mistakesStats.trend === 0 ? '0' : `${summary.mistakesStats.trend}`) : `+${summary.mistakesStats.trend}`;
+
+    return `<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>音乐练习${typeLabel} - ${rangeLabel}</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 40px;
+    font-family: Inter, "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: #eef4f1;
+    color: #172522;
+  }
+  .report-container {
+    max-width: 900px;
+    margin: 0 auto;
+    background: white;
+    border-radius: 16px;
+    box-shadow: 0 12px 40px rgba(23, 61, 55, 0.1);
+    overflow: hidden;
+  }
+  .report-header {
+    padding: 32px 40px;
+    background: linear-gradient(135deg, #0f766e 0%, #14b8a6 100%);
+    color: white;
+  }
+  .report-header h1 { margin: 0 0 8px 0; font-size: 28px; }
+  .report-header .subtitle { opacity: 0.9; font-size: 14px; }
+  .report-header .meta { margin-top: 12px; font-size: 12px; opacity: 0.8; }
+  .report-body { padding: 32px 40px; }
+  .section { margin-bottom: 28px; }
+  .section-title {
+    font-size: 18px;
+    font-weight: 700;
+    color: #172522;
+    margin: 0 0 16px 0;
+    padding-bottom: 8px;
+    border-bottom: 2px solid #e4efec;
+  }
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+  }
+  .stat-card {
+    background: #fbfefc;
+    border: 1px solid #e4efec;
+    border-radius: 10px;
+    padding: 16px;
+  }
+  .stat-label { font-size: 12px; color: #60736f; font-weight: 500; }
+  .stat-value { font-size: 28px; font-weight: 700; color: #172522; margin-top: 4px; }
+  .stat-change { font-size: 13px; font-weight: 600; margin-top: 4px; }
+  .plan-bar {
+    height: 10px;
+    background: #e4efec;
+    border-radius: 5px;
+    overflow: hidden;
+    margin-top: 8px;
+  }
+  .plan-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #0f766e, #14b8a6);
+    border-radius: 5px;
+  }
+  .list-group { display: grid; gap: 10px; }
+  .list-item {
+    background: #fbfefc;
+    border: 1px solid #e4efec;
+    border-radius: 8px;
+    padding: 14px 16px;
+  }
+  .item-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 6px;
+  }
+  .item-title { font-weight: 600; color: #172522; font-size: 15px; }
+  .item-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 10px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 600;
+    color: white;
+  }
+  .item-meta {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    color: #60736f;
+    font-size: 13px;
+  }
+  .item-meta strong { color: #172522; font-weight: 600; }
+  .empty-tip {
+    text-align: center;
+    padding: 20px;
+    color: #60736f;
+    background: #f6faf8;
+    border-radius: 8px;
+    font-size: 13px;
+  }
+  .overdue { background: #fef2f2; border-color: #fca5a5; }
+  .overdue .item-title { color: #991b1b; }
+  .goals-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+  }
+  .goal-card {
+    background: #fbfefc;
+    border: 1px solid #e4efec;
+    border-radius: 8px;
+    padding: 14px;
+  }
+  .goal-card.overdue { background: #fef2f2; border-color: #fca5a5; }
+  .goal-card.achieved { background: #f0fdf4; border-color: #86efac; }
+  .progress-bar {
+    height: 6px;
+    background: #e4efec;
+    border-radius: 3px;
+    overflow: hidden;
+    margin-top: 4px;
+  }
+  .progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #0f766e, #14b8a6);
+    border-radius: 3px;
+  }
+  @media print {
+    body { background: white; padding: 0; }
+    .report-container { box-shadow: none; border-radius: 0; }
+  }
+  @media (max-width: 700px) {
+    body { padding: 16px; }
+    .report-header, .report-body { padding: 20px; }
+    .stats-grid, .goals-grid { grid-template-columns: 1fr 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="report-container">
+  <div class="report-header">
+    <h1>🎵 音乐练习${typeLabel}</h1>
+    <div class="subtitle">${rangeLabel}</div>
+    <div class="meta">生成时间：${new Date(generatedAt).toLocaleString('zh-CN')}</div>
+  </div>
+  <div class="report-body">
+    <div class="section">
+      <h2 class="section-title">📊 核心数据</h2>
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-label">总练习时长</div>
+          <div class="stat-value">${summary.totalMinutes}<span style="font-size:14px;font-weight:500;color:#60736f;">min</span></div>
+          <div class="stat-change" style="color:${minutesChangeColor};">${minutesChangeText} min vs 上${rangeType === 'week' ? '周' : '月'}</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">曲目覆盖数</div>
+          <div class="stat-value">${summary.pieceCount}<span style="font-size:14px;font-weight:500;color:#60736f;">首</span></div>
+          <div class="stat-change" style="color:${pieceChangeColor};">${pieceChangeText} 首 vs 上${rangeType === 'week' ? '周' : '月'}</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">平均 BPM</div>
+          <div class="stat-value">${summary.bpmStats.avg}</div>
+          <div class="stat-change" style="color:${bpmGainColor};">${bpmGainText} BPM 提升</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">错误次数趋势</div>
+          <div class="stat-value">${summary.mistakesStats.avg}<span style="font-size:14px;font-weight:500;color:#60736f;">次/次</span></div>
+          <div class="stat-change" style="color:${mistakeTrendColor};">${mistakeTrendText} 次变化</div>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px;">
+        <div class="stat-card">
+          <div class="stat-label">练习天数</div>
+          <div class="stat-value">${summary.activeDays}<span style="font-size:14px;font-weight:500;color:#60736f;">天</span></div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">练习记录数</div>
+          <div class="stat-value">${summary.recordCount}<span style="font-size:14px;font-weight:500;color:#60736f;">条</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2 class="section-title">✅ 计划完成情况</h2>
+      <div class="list-item">
+        <div class="item-head">
+          <div>
+            <div class="item-title">任务完成率</div>
+            <div class="item-meta">
+              <span>已完成: <strong>${planCompletion.completedTasks}</strong> / ${planCompletion.totalTasks} 个任务</span>
+              <span>预计总时长: <strong>${planCompletion.totalEstimatedMinutes}min</strong></span>
+            </div>
+          </div>
+          <div style="font-size:24px;font-weight:700;color:#0f766e;">${planCompletion.completionRate}%</div>
+        </div>
+        <div class="plan-bar"><div class="plan-fill" style="width:${planCompletion.completionRate}%;"></div></div>
+      </div>
+      ${planCompletion.dailyStats.length ? `
+      <div style="margin-top:12px;">
+        <div style="font-size:13px;color:#60736f;margin-bottom:8px;">每日任务统计：</div>
+        <div class="list-group">
+          ${planCompletion.dailyStats.map(d => `
+          <div class="list-item" style="padding:10px 14px;">
+            <div class="item-head">
+              <div class="item-title" style="font-size:14px;">${d.date}</div>
+              <div class="item-meta">
+                <span>完成: <strong>${d.completed}/${d.total}</strong></span>
+                <span>预计: <strong>${d.minutes}min</strong></span>
+              </div>
+            </div>
+          </div>
+          `).join('')}
+        </div>
+      </div>
+      ` : '<div class="empty-tip">本期暂无计划任务</div>'}
+    </div>
+
+    <div class="section">
+      <h2 class="section-title">🎯 目标进度</h2>
+      ${goalsProgress.length ? `
+      <div class="goals-grid">
+        ${goalsProgress.map(g => {
+          const isOverdue = g.progress.isOverdue && !g.progress.isAchieved;
+          const isAchieved = g.progress.isAchieved || g.achieved;
+          return `
+          <div class="goal-card ${isOverdue ? 'overdue' : ''} ${isAchieved ? 'achieved' : ''}">
+            <div class="item-head">
+              <div class="item-title">${g.piece}</div>
+              <span class="item-tag" style="background:${g.pieceType.color};">${g.pieceType.icon} ${g.pieceType.type}</span>
+            </div>
+            <div class="item-meta" style="margin-bottom:8px;">
+              <span>目标: <strong>${g.targetBpm} BPM</strong></span>
+              <span>当前: <strong>${g.progress.currentBpm} BPM</strong></span>
+              <span>截止: <strong>${g.targetDate}</strong></span>
+            </div>
+            <div style="font-size:12px;color:#60736f;">BPM 进度: ${g.progress.bpmProgress}%</div>
+            <div class="progress-bar"><div class="progress-fill" style="width:${g.progress.bpmProgress}%;"></div></div>
+            <div style="font-size:12px;color:#60736f;margin-top:6px;">本周练习: ${g.progress.weekMinutes}/${g.weeklyMinutes}min (${g.progress.weeklyProgress}%)</div>
+            <div class="progress-bar"><div class="progress-fill" style="width:${g.progress.weeklyProgress}%;background:linear-gradient(90deg,#d97706,#f59e0b);"></div></div>
+            ${isOverdue ? `<div style="margin-top:8px;font-size:12px;color:#991b1b;font-weight:600;">⚠ 已逾期 ${Math.abs(g.progress.daysRemaining)} 天</div>` : ''}
+            ${isAchieved ? `<div style="margin-top:8px;font-size:12px;color:#059669;font-weight:600;">✓ 已达成</div>` : ''}
+          </div>
+          `;
+        }).join('')}
+      </div>
+      ` : '<div class="empty-tip">暂无练习目标</div>'}
+    </div>
+
+    ${overdueGoals.length ? `
+    <div class="section">
+      <h2 class="section-title" style="color:#991b1b;">⚠ 逾期目标</h2>
+      <div class="list-group">
+        ${overdueGoals.map(g => `
+        <div class="list-item overdue">
+          <div class="item-head">
+            <div class="item-title">${g.piece}</div>
+            <span class="item-tag" style="background:#dc2626;">逾期 ${Math.abs(g.progress.daysRemaining)} 天</span>
+          </div>
+          <div class="item-meta">
+            <span>目标: <strong>${g.targetBpm} BPM</strong></span>
+            <span>当前: <strong>${g.progress.currentBpm} BPM</strong></span>
+            <span>截止日期: <strong>${g.targetDate}</strong></span>
+          </div>
+        </div>
+        `).join('')}
+      </div>
+    </div>
+    ` : ''}
+
+    <div class="section">
+      <h2 class="section-title">🔥 最值得继续练的片段</h2>
+      ${recommendedSections.length ? `
+      <div class="list-group">
+        ${recommendedSections.map(s => {
+          const masteryColor = getMasteryColor(s.latestMastery);
+          return `
+          <div class="list-item">
+            <div class="item-head">
+              <div>
+                <div class="item-title">${s.piece} - ${s.name}</div>
+                <div class="item-meta">
+                  <span>乐器: <strong>${s.instrument}</strong></span>
+                  <span>练习次数: <strong>${s.practiceCount}</strong></span>
+                </div>
+              </div>
+              <span class="item-tag" style="background:${masteryColor};">${getMasteryLabel(s.latestMastery)}</span>
+            </div>
+            <div class="item-meta" style="margin-top:8px;">
+              <span>当前 BPM: <strong>${s.latestBpm}</strong> <span style="color:${s.bpmGain >= 0 ? '#059669' : '#dc2626'};">(${s.bpmGain >= 0 ? '+' : ''}${s.bpmGain})</span></span>
+              <span>错误次数: <strong>${s.latestMistakes}</strong> <span style="color:${s.mistakeTrend <= 0 ? '#059669' : '#dc2626'};">(${s.mistakeTrend <= 0 ? (s.mistakeTrend === 0 ? '0' : s.mistakeTrend) : '+' + s.mistakeTrend})</span></span>
+              <span>掌握: <strong>${s.latestMastery}/5</strong></span>
+            </div>
+          </div>
+          `;
+        }).join('')}
+      </div>
+      ` : '<div class="empty-tip">本期暂无分段练习数据，添加练习记录时可拆分片段进行精细化复盘</div>'}
+    </div>
+
+    <div class="section">
+      <h2 class="section-title">📚 曲目档案</h2>
+      ${trackArchive.length ? `
+      <div class="goals-grid">
+        ${trackArchive.map(t => {
+          const mistakeColor = t.mistakeTrend < 0 ? '#059669' : t.mistakeTrend > 0 ? '#dc2626' : '#60736f';
+          const mistakeText = t.mistakeTrend < 0 ? `↓ ${Math.abs(t.mistakeTrend)}` : t.mistakeTrend > 0 ? `↑ ${t.mistakeTrend}` : '—';
+          return `
+          <div class="goal-card">
+            <div class="item-head">
+              <div>
+                <div class="item-title">${t.piece}</div>
+                <div class="item-meta">
+                  <span>${t.instrument}</span>
+                  <span>练习 <strong>${t.practiceCount}</strong> 次</span>
+                </div>
+              </div>
+            </div>
+            <div class="item-meta" style="margin-top:8px;">
+              <span>最高 BPM: <strong>${t.maxBpm}</strong></span>
+              <span>累计时长: <strong>${t.totalMinutes}min</strong></span>
+              <span>最近: <strong>${t.lastDate}</strong></span>
+            </div>
+            <div style="margin-top:6px;font-size:12px;">
+              错误趋势: <strong style="color:${mistakeColor};">${mistakeText}</strong>
+            </div>
+          </div>
+          `;
+        }).join('')}
+      </div>
+      ` : '<div class="empty-tip">本期暂无曲目数据</div>'}
+    </div>
+  </div>
+</div>
+</body>
+</html>`;
+  }
+
+  function exportReport(rangeType) {
+    const report = generateReport(rangeType);
+    const html = buildExportHtml(report);
+    const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    const typeLabel = rangeType === 'week' ? 'weekly' : 'monthly';
+    a.download = `music-practice-${typeLabel}-report-${report.startDate}.html`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  return {
+    generateReport,
+    exportReport,
+    getRecordsInRange,
+    buildExportHtml
+  };
+})();
+
+let reportRange = 'week';
 
 initSession();
 render();

@@ -2570,3 +2570,575 @@ td button { margin-left: 6px; background: #dff3ef; }
     align-self: flex-end;
   }
 }
+
+.reportPanel {
+  margin-top: 18px;
+  background: linear-gradient(135deg, #f0fdfa 0%, #fdf4ff 50%, #f0f9ff 100%);
+  border: 2px solid #5eead4;
+}
+
+.reportActions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.reportRangeToggle {
+  display: flex;
+  background: #f0f4f2;
+  border-radius: 8px;
+  padding: 3px;
+  border: 1px solid #cfe2de;
+}
+
+.rangeBtn {
+  background: transparent;
+  border: none;
+  padding: 6px 16px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #60736f;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.rangeBtn:hover {
+  color: #172522;
+}
+
+.rangeBtn.active {
+  background: #0f766e;
+  color: white;
+  box-shadow: 0 2px 6px rgba(15, 118, 110, 0.3);
+}
+
+.reportContent {
+  margin-top: 16px;
+}
+
+.reportEmpty {
+  text-align: center;
+  padding: 40px 20px;
+  background: white;
+  border-radius: 10px;
+  border: 1px dashed #c4d9d5;
+}
+
+.reportEmpty.small {
+  padding: 20px;
+}
+
+.reportEmptyIcon {
+  font-size: 48px;
+  display: block;
+  margin-bottom: 12px;
+}
+
+.reportEmptyTitle {
+  font-size: 17px;
+  font-weight: 600;
+  color: #172522;
+  margin: 0 0 6px 0;
+}
+
+.reportEmptyDesc {
+  font-size: 14px;
+  color: #60736f;
+  margin: 0;
+  line-height: 1.6;
+}
+
+.reportStats {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.reportStat {
+  background: white;
+  border: 1px solid #e4efec;
+  border-radius: 10px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  transition: all 0.2s ease;
+}
+
+.reportStat:hover {
+  border-color: #0f766e;
+  box-shadow: 0 4px 12px rgba(15, 118, 110, 0.1);
+  transform: translateY(-2px);
+}
+
+.reportStatLabel {
+  font-size: 12px;
+  color: #60736f;
+  font-weight: 500;
+}
+
+.reportStatValue {
+  font-size: 26px;
+  font-weight: 700;
+  color: #172522;
+  line-height: 1.2;
+}
+
+.reportStatValue small {
+  font-size: 13px;
+  font-weight: 500;
+  color: #60736f;
+  margin-left: 2px;
+}
+
+.reportStatChange {
+  font-size: 12px;
+  font-weight: 600;
+  margin-top: 2px;
+}
+
+.reportSection {
+  margin-bottom: 20px;
+}
+
+.reportSectionTitle {
+  font-size: 16px;
+  font-weight: 700;
+  color: #172522;
+  margin: 0 0 12px 0;
+  padding-bottom: 8px;
+  border-bottom: 2px solid #e4efec;
+}
+
+.reportSectionTitle.overdue {
+  color: #991b1b;
+  border-bottom-color: #fecaca;
+}
+
+.reportChart {
+  background: white;
+  border: 1px solid #e4efec;
+  border-radius: 10px;
+  padding: 16px;
+}
+
+.reportPlanCard {
+  background: white;
+  border: 1px solid #e4efec;
+  border-radius: 10px;
+  padding: 18px;
+}
+
+.reportPlanHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+
+.reportPlanTitle {
+  font-size: 16px;
+  font-weight: 700;
+  color: #172522;
+  margin-bottom: 4px;
+}
+
+.reportPlanMeta {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  color: #60736f;
+  font-size: 13px;
+}
+
+.reportPlanMeta strong {
+  color: #172522;
+  font-weight: 600;
+}
+
+.reportPlanPercent {
+  font-size: 32px;
+  font-weight: 700;
+  color: #0f766e;
+  flex-shrink: 0;
+}
+
+.reportPlanBar {
+  height: 10px;
+  background: #e4efec;
+  border-radius: 5px;
+  overflow: hidden;
+  margin-bottom: 12px;
+}
+
+.reportPlanFill {
+  height: 100%;
+  background: linear-gradient(90deg, #0f766e, #14b8a6);
+  border-radius: 5px;
+  transition: width 0.3s ease;
+}
+
+.reportPlanDaily {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px dashed #cfe2de;
+}
+
+.reportPlanDay {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px;
+  background: #f6faf8;
+  border-radius: 6px;
+  font-size: 12px;
+}
+
+.reportPlanDayDate {
+  font-weight: 600;
+  color: #0f766e;
+}
+
+.reportPlanDayInfo {
+  color: #60736f;
+}
+
+.reportPlanDayInfo strong {
+  color: #172522;
+  font-weight: 600;
+}
+
+.reportGoals {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+
+.reportGoalCard {
+  background: white;
+  border: 1px solid #e4efec;
+  border-radius: 10px;
+  padding: 14px;
+  transition: all 0.2s ease;
+}
+
+.reportGoalCard:hover {
+  border-color: #0f766e;
+  box-shadow: 0 4px 12px rgba(15, 118, 110, 0.08);
+}
+
+.reportGoalCard.overdue {
+  background: #fef2f2;
+  border-color: #fca5a5;
+}
+
+.reportGoalCard.achieved {
+  background: #f0fdf4;
+  border-color: #86efac;
+}
+
+.reportGoalHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.reportGoalTitle {
+  font-size: 15px;
+  font-weight: 700;
+  color: #172522;
+}
+
+.reportGoalTag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 10px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 600;
+  color: white;
+  flex-shrink: 0;
+}
+
+.reportGoalMeta {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  color: #60736f;
+  font-size: 12px;
+  margin-bottom: 10px;
+}
+
+.reportGoalMeta strong {
+  color: #172522;
+  font-weight: 600;
+}
+
+.reportGoalProgress {
+  display: grid;
+  gap: 6px;
+}
+
+.reportGoalProgRow {
+  display: grid;
+  grid-template-columns: 70px 1fr;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  color: #60736f;
+  font-weight: 500;
+}
+
+.reportGoalProgBar {
+  height: 5px;
+  background: #e4efec;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.reportGoalProgFill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+
+.reportGoalProgFill.bpm {
+  background: linear-gradient(90deg, #0f766e, #14b8a6);
+}
+
+.reportGoalProgFill.weekly {
+  background: linear-gradient(90deg, #d97706, #f59e0b);
+}
+
+.reportGoalAlert {
+  margin-top: 10px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.reportGoalAlert.overdue {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.reportGoalAlert.achieved {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.reportOverdueList {
+  display: grid;
+  gap: 8px;
+}
+
+.reportOverdueItem {
+  background: #fef2f2;
+  border: 1px solid #fca5a5;
+  border-radius: 8px;
+  padding: 12px 14px;
+}
+
+.reportOverdueTitle {
+  font-size: 14px;
+  font-weight: 700;
+  color: #991b1b;
+  margin-bottom: 4px;
+}
+
+.reportOverdueMeta {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  color: #7f1d1d;
+  font-size: 12px;
+}
+
+.reportOverdueMeta strong {
+  font-weight: 600;
+}
+
+.reportSectionsList {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 12px;
+}
+
+.reportSectionCard {
+  background: white;
+  border: 1px solid #e4efec;
+  border-radius: 10px;
+  padding: 14px;
+  transition: all 0.2s ease;
+}
+
+.reportSectionCard:hover {
+  border-color: #0f766e;
+  box-shadow: 0 4px 12px rgba(15, 118, 110, 0.08);
+  transform: translateY(-2px);
+}
+
+.reportSectionHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.reportSectionName {
+  font-size: 14px;
+  font-weight: 700;
+  color: #172522;
+  margin-bottom: 4px;
+}
+
+.reportSectionMeta {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  color: #60736f;
+  font-size: 12px;
+}
+
+.reportSectionMeta strong {
+  color: #172522;
+  font-weight: 600;
+}
+
+.reportMasteryBadge {
+  color: white;
+  padding: 3px 10px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 600;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.reportSectionStats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed #e4efec;
+}
+
+.reportSectionStat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.reportSectionStat span {
+  font-size: 11px;
+  color: #60736f;
+  font-weight: 500;
+}
+
+.reportSectionStat strong {
+  font-size: 16px;
+  font-weight: 700;
+  color: #172522;
+}
+
+.reportSectionStat small {
+  font-size: 11px;
+  font-weight: 600;
+  margin-left: 2px;
+}
+
+.reportTracks {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 12px;
+}
+
+.reportTrackCard {
+  background: white;
+  border: 1px solid #e4efec;
+  border-radius: 10px;
+  padding: 14px;
+  transition: all 0.2s ease;
+}
+
+.reportTrackCard:hover {
+  border-color: #8b5cf6;
+  box-shadow: 0 4px 12px rgba(139, 92, 246, 0.08);
+}
+
+.reportTrackHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.reportTrackName {
+  font-size: 15px;
+  font-weight: 700;
+  color: #172522;
+}
+
+.reportTrackStats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  color: #60736f;
+  font-size: 12px;
+}
+
+.reportTrackStats strong {
+  color: #172522;
+  font-weight: 600;
+}
+
+@media (max-width: 900px) {
+  .reportStats {
+    grid-template-columns: repeat(3, 1fr);
+  }
+  .reportGoals {
+    grid-template-columns: 1fr;
+  }
+  .reportActions {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .reportRangeToggle {
+    width: 100%;
+    justify-content: center;
+  }
+  .rangeBtn {
+    flex: 1;
+    text-align: center;
+  }
+}
+
+@media (max-width: 600px) {
+  .reportStats {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .reportPlanHead {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .reportPlanPercent {
+    font-size: 28px;
+  }
+  .reportSectionStats {
+    grid-template-columns: 1fr 1fr;
+  }
+  .reportTrackStats {
+    grid-template-columns: 1fr;
+  }
+}
