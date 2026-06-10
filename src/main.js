@@ -515,6 +515,7 @@ let session = JSON.parse(localStorage.getItem(sessionKey) || 'null') || {
   piece: '',
   targetBpm: '',
   note: '',
+  sections: [],
   createdAt: null
 };
 let committedSessionIds = JSON.parse(localStorage.getItem(committedSessionsKey) || '[]');
@@ -706,6 +707,23 @@ function startSession() {
     return;
   }
 
+  const libSelect = document.querySelector('#sessionLibrarySelect');
+  let sections = [];
+  if (libSelect && libSelect.value) {
+    const item = LibraryManager.getById(libSelect.value);
+    if (item && item.defaultSections && item.defaultSections.length) {
+      const bpmVal = data.targetBpm ? Number(data.targetBpm) : (item.targetBpm || 80);
+      sections = item.defaultSections.map(s => ({
+        id: crypto.randomUUID(),
+        name: s.name,
+        bpm: bpmVal,
+        mistakes: 0,
+        mastery: 3,
+        note: s.note || ''
+      }));
+    }
+  }
+
   session = {
     id: crypto.randomUUID(),
     status: 'running',
@@ -715,6 +733,7 @@ function startSession() {
     piece: data.piece.trim(),
     targetBpm: data.targetBpm ? Number(data.targetBpm) : null,
     note: data.note ? data.note.trim() : '',
+    sections: sections,
     createdAt: Date.now()
   };
   saveSession();
@@ -762,7 +781,8 @@ function endSession() {
     bpm: session.targetBpm || 60,
     minutes: minutes,
     mistakes: 0,
-    note: session.note || `计时练习，实际时长 ${formatDuration(elapsedMs)}`
+    note: session.note || `计时练习，实际时长 ${formatDuration(elapsedMs)}`,
+    sections: session.sections && session.sections.length ? [...session.sections] : []
   };
 
   const hasDuplicateRecord = isDuplicate(item, records);
@@ -789,6 +809,7 @@ function endSession() {
     piece: '',
     targetBpm: '',
     note: '',
+    sections: [],
     createdAt: null
   };
   saveSession();
@@ -810,6 +831,7 @@ function cancelSession() {
     piece: '',
     targetBpm: '',
     note: '',
+    sections: [],
     createdAt: null
   };
   saveSession();
@@ -871,6 +893,10 @@ function renderSessionPanel() {
           <input name="targetBpm" type="number" min="1" step="1" placeholder="目标BPM" />
           <input name="note" placeholder="备注（可选）" />
         </div>
+        <div id="sessionSectionsPreview" class="sessionSectionsPreview" style="display:none;">
+          <div class="previewTitle">📋 默认练习片段</div>
+          <div id="sessionSectionsList" class="sessionSectionsList"></div>
+        </div>
         <button type="button" class="primary" id="startSessionBtn">▶ 开始练习</button>
       </form>
     `;
@@ -888,6 +914,8 @@ function renderSessionPanel() {
         const instrumentSelect = sessionForm.querySelector('select[name="instrument"]');
         const pieceInput = sessionForm.querySelector('input[name="piece"]');
         const bpmInput = sessionForm.querySelector('input[name="targetBpm"]');
+        const previewEl = document.querySelector('#sessionSectionsPreview');
+        const listEl = document.querySelector('#sessionSectionsList');
         if (item.instrument && instrumentSelect) {
           let found = false;
           for (const opt of instrumentSelect.options) {
@@ -908,6 +936,14 @@ function renderSessionPanel() {
         if (pieceInput) pieceInput.value = item.name;
         if (item.targetBpm && bpmInput && !bpmInput.value) {
           bpmInput.value = item.targetBpm;
+        }
+        if (item.defaultSections && item.defaultSections.length && previewEl && listEl) {
+          listEl.innerHTML = item.defaultSections.map(s => `
+            <span class="libSectionTag">${escapeHtml(s.name)}${s.note ? ` <small class="muted">· ${escapeHtml(s.note)}</small>` : ''}</span>
+          `).join('');
+          previewEl.style.display = 'block';
+        } else if (previewEl) {
+          previewEl.style.display = 'none';
         }
       });
     }
@@ -940,6 +976,12 @@ function renderSessionPanel() {
           <div class="sessionInfoRow">
             <span class="sessionLabel">备注</span>
             <strong>${escapeHtml(session.note)}</strong>
+          </div>
+          ` : ''}
+          ${session.sections && session.sections.length ? `
+          <div class="sessionInfoRow">
+            <span class="sessionLabel">练习片段</span>
+            <strong>${session.sections.length} 段</strong>
           </div>
           ` : ''}
         </div>
@@ -1384,6 +1426,10 @@ document.querySelector('#app').innerHTML = `
           <input name="targetBpm" type="number" min="1" step="1" placeholder="目标BPM" required />
           <input name="estimatedMinutes" type="number" min="1" step="1" placeholder="预计分钟" required />
         </div>
+        <div id="planSectionsPreview" class="planSectionsPreview" style="display:none;">
+          <div class="previewTitle">📋 默认练习片段</div>
+          <div id="planSectionsList" class="planSectionsList"></div>
+        </div>
         <button class="primary">添加任务</button>
       </form>
       <div id="planList" class="planList"></div>
@@ -1410,6 +1456,10 @@ document.querySelector('#app').innerHTML = `
         <div class="pair">
           <input name="targetDate" type="date" required />
           <input name="weeklyMinutes" type="number" min="1" step="1" placeholder="每周练习分钟" required />
+        </div>
+        <div id="goalSectionsPreview" class="goalSectionsPreview" style="display:none;">
+          <div class="previewTitle">📋 该曲目练习片段（参考）</div>
+          <div id="goalSectionsList" class="goalSectionsList"></div>
         </div>
         <button class="primary">设置目标</button>
       </form>
@@ -1552,17 +1602,35 @@ let libLinks = [];
 planForm.addEventListener('submit', (event) => {
   event.preventDefault();
   const data = Object.fromEntries(new FormData(planForm).entries());
+  let sections = [];
+  const libSelect = document.querySelector('#planLibrarySelect');
+  if (libSelect && libSelect.value) {
+    const item = LibraryManager.getById(libSelect.value);
+    if (item && item.defaultSections && item.defaultSections.length) {
+      sections = item.defaultSections.map(s => ({
+        id: crypto.randomUUID(),
+        name: s.name,
+        bpm: Number(data.targetBpm) || (item.targetBpm || 80),
+        mistakes: 0,
+        mastery: 3,
+        note: s.note || ''
+      }));
+    }
+  }
   const task = {
     id: crypto.randomUUID(),
     piece: data.piece,
     targetBpm: Number(data.targetBpm),
     estimatedMinutes: Number(data.estimatedMinutes),
     completed: false,
-    date: getToday()
+    date: getToday(),
+    sections: sections
   };
   planTasks.push(task);
   savePlan(planTasks);
   planForm.reset();
+  const previewEl = document.querySelector('#planSectionsPreview');
+  if (previewEl) previewEl.style.display = 'none';
   render();
 });
 
@@ -1589,6 +1657,8 @@ goalForm.addEventListener('submit', (event) => {
   goals.push(goal);
   saveGoals(goals);
   goalForm.reset();
+  const previewEl = document.querySelector('#goalSectionsPreview');
+  if (previewEl) previewEl.style.display = 'none';
   render();
 });
 
@@ -2755,9 +2825,19 @@ function render() {
         if (!item) return;
         const pieceInput = planForm.querySelector('input[name="piece"]');
         const bpmInput = planForm.querySelector('input[name="targetBpm"]');
+        const previewEl = document.querySelector('#planSectionsPreview');
+        const listEl = document.querySelector('#planSectionsList');
         if (pieceInput) pieceInput.value = item.name;
         if (item.targetBpm && bpmInput && !bpmInput.value) {
           bpmInput.value = item.targetBpm;
+        }
+        if (item.defaultSections && item.defaultSections.length && previewEl && listEl) {
+          listEl.innerHTML = item.defaultSections.map(s => `
+            <span class="libSectionTag">${escapeHtml(s.name)}${s.note ? ` <small class="muted">· ${escapeHtml(s.note)}</small>` : ''}</span>
+          `).join('');
+          previewEl.style.display = 'block';
+        } else if (previewEl) {
+          previewEl.style.display = 'none';
         }
       });
     }
@@ -2796,6 +2876,16 @@ function render() {
         }
         if (item.targetBpm && bpmInput && !bpmInput.value) {
           bpmInput.value = item.targetBpm;
+        }
+        const previewEl = document.querySelector('#goalSectionsPreview');
+        const listEl = document.querySelector('#goalSectionsList');
+        if (item.defaultSections && item.defaultSections.length && previewEl && listEl) {
+          listEl.innerHTML = item.defaultSections.map(s => `
+            <span class="libSectionTag">${escapeHtml(s.name)}${s.note ? ` <small class="muted">· ${escapeHtml(s.note)}</small>` : ''}</span>
+          `).join('');
+          previewEl.style.display = 'block';
+        } else if (previewEl) {
+          previewEl.style.display = 'none';
         }
       });
     }
@@ -3296,6 +3386,11 @@ function renderPlan() {
           <span>目标 BPM: <strong>${task.targetBpm}</strong></span>
           <span>预计: <strong>${task.estimatedMinutes}min</strong></span>
         </div>
+        ${task.sections && task.sections.length ? `
+        <div class="taskSections">
+          ${task.sections.map(s => `<span class="taskSectionTag">${escapeHtml(s.name)}</span>`).join('')}
+        </div>
+        ` : ''}
       </div>
       <button class="taskDel" data-plan-del="${task.id}" aria-label="删除">×</button>
     </div>

@@ -2505,6 +2505,56 @@ td button { margin-left: 6px; background: #dff3ef; }
   white-space: pre-wrap;
 }
 
+.sessionSectionsPreview,
+.planSectionsPreview,
+.goalSectionsPreview {
+  margin: 8px 0;
+  padding: 10px 12px;
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.05), rgba(16, 185, 129, 0.05));
+  border: 1px dashed #c4b5fd;
+  border-radius: 8px;
+}
+
+.previewTitle {
+  font-size: 12px;
+  font-weight: 600;
+  color: #6d28d9;
+  margin-bottom: 8px;
+}
+
+.sessionSectionsList,
+.planSectionsList,
+.goalSectionsList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.sessionSectionsList .libSectionTag,
+.planSectionsList .libSectionTag,
+.goalSectionsList .libSectionTag {
+  font-size: 11px;
+  padding: 3px 8px;
+}
+
+.taskSections {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.taskSectionTag {
+  display: inline-block;
+  padding: 2px 8px;
+  background: #f0fdfa;
+  color: #0f766e;
+  border: 1px solid #99f6e4;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 500;
+}
+
 @media (max-width: 700px) {
   .libSectionItem,
   .libLinkItem {
