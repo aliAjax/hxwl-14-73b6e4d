@@ -119,7 +119,10 @@ function applyFilters(recordsToFilter) {
     if (filters.bpmMax && record.bpm > Number(filters.bpmMax)) return false;
     if (filters.mistakesMin && record.mistakes < Number(filters.mistakesMin)) return false;
     if (filters.mistakesMax && record.mistakes > Number(filters.mistakesMax)) return false;
-    if (filters.noteKeyword && record.note && !record.note.includes(filters.noteKeyword)) return false;
+    if (filters.noteKeyword) {
+      const note = record.note || '';
+      if (!note.includes(filters.noteKeyword)) return false;
+    }
     return true;
   });
 }
