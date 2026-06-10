@@ -1475,6 +1475,7 @@ function parseImportFile(file) {
 
 function processImportData(parsedData) {
   const result = {
+    validRecords: [],
     newRecords: [],
     duplicateRecords: [],
     invalidRecords: [],
@@ -1525,6 +1526,8 @@ function processImportData(parsedData) {
         note: section.note ? String(section.note).trim() : ''
       }));
     }
+
+    result.validRecords.push({ record: normalizedRecord, index });
 
     if (isDuplicate(normalizedRecord, records)) {
       result.duplicateRecords.push({ record: normalizedRecord, index });
@@ -1599,7 +1602,7 @@ function renderImportPreview(result) {
   if (duplicateRecords.length > 0) {
     html += `
       <div class="importSection duplicates">
-        <h3>⚠️ 重复记录 (${duplicateRecords.length}) - 这些记录将被跳过</h3>
+        <h3>⚠️ 重复记录 (${duplicateRecords.length}) - 合并模式会跳过，覆盖模式会保留</h3>
         <div class="tableWrap">
           <table class="previewTable">
             <thead>
@@ -1635,7 +1638,7 @@ function renderImportPreview(result) {
   if (newRecords.length > 0) {
     html += `
       <div class="importSection new">
-        <h3>✅ 新增记录 (${newRecords.length}) - 这些记录将被导入</h3>
+        <h3>✅ 新增记录 (${newRecords.length}) - 合并模式将导入这些记录</h3>
         <div class="tableWrap">
           <table class="previewTable">
             <thead>
@@ -1671,12 +1674,36 @@ function renderImportPreview(result) {
   }
 
   importPreview.innerHTML = html;
+  importPreview.querySelectorAll('input[name="importMode"]').forEach((radio) => {
+    radio.addEventListener('change', updateImportConfirmState);
+  });
+  updateImportConfirmState();
+}
 
-  modalConfirm.disabled = newRecords.length === 0;
-  if (newRecords.length === 0) {
-    modalConfirm.textContent = '无有效数据可导入';
+function getSelectedImportMode() {
+  const modeEl = importPreview.querySelector('input[name="importMode"]:checked');
+  return modeEl ? modeEl.value : 'merge';
+}
+
+function updateImportConfirmState() {
+  if (!pendingImportData) {
+    modalConfirm.disabled = true;
+    modalConfirm.textContent = '确认导入';
+    return;
+  }
+
+  const mode = getSelectedImportMode();
+  const importCount = mode === 'overwrite'
+    ? pendingImportData.validRecords.length
+    : pendingImportData.newRecords.length;
+
+  modalConfirm.disabled = importCount === 0;
+  if (importCount === 0) {
+    modalConfirm.textContent = mode === 'overwrite' ? '无有效数据可覆盖' : '无新增数据可导入';
   } else {
-    modalConfirm.textContent = `确认导入 ${newRecords.length} 条记录`;
+    modalConfirm.textContent = mode === 'overwrite'
+      ? `确认覆盖导入 ${importCount} 条记录`
+      : `确认导入 ${importCount} 条记录`;
   }
 }
 
@@ -1739,34 +1766,36 @@ importFile.addEventListener('change', async (e) => {
 });
 
 modalConfirm.addEventListener('click', async () => {
-  if (!pendingImportData || pendingImportData.newRecords.length === 0) return;
+  if (!pendingImportData) return;
 
-  const modeEl = importPreview.querySelector('input[name="importMode"]:checked');
-  const mode = modeEl ? modeEl.value : 'merge';
+  const mode = getSelectedImportMode();
   const newRecords = pendingImportData.newRecords.map(item => item.record);
+  const validRecords = pendingImportData.validRecords.map(item => item.record);
+  const recordsToImport = mode === 'overwrite' ? validRecords : newRecords;
+  if (recordsToImport.length === 0) return;
 
   let finalRecords;
   if (mode === 'overwrite') {
     const confirmed = await showConfirm(
       '覆盖导入确认',
-      `确定要用导入的 ${newRecords.length} 条记录覆盖所有现有 ${records.length} 条记录吗？\n此操作可通过历史版本回滚。`
+      `确定要用导入的 ${recordsToImport.length} 条记录覆盖所有现有 ${records.length} 条记录吗？\n此操作可通过历史版本回滚。`
     );
     if (!confirmed) return;
-    finalRecords = newRecords;
+    finalRecords = recordsToImport;
   } else {
-    finalRecords = [...newRecords, ...records];
+    finalRecords = [...recordsToImport, ...records];
   }
 
   const result = VersionManager.recordChange('import', finalRecords, {
-    count: newRecords.length,
+    count: recordsToImport.length,
     mode,
-    ids: newRecords.map(r => r.id)
+    ids: recordsToImport.map(r => r.id)
   });
   records = result.records;
   render();
   closeImportModal();
 
-  const count = newRecords.length;
+  const count = recordsToImport.length;
   const modeText = mode === 'overwrite' ? '（覆盖模式）' : '';
   alert(`成功导入 ${count} 条练习记录${modeText}！`);
 });
