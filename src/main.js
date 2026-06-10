@@ -5,6 +5,9 @@ const planKey = 'hxwl-14-music-practice-plan';
 const goalKey = 'hxwl-14-music-practice-goals';
 const sessionKey = 'hxwl-14-practice-session';
 const committedSessionsKey = 'hxwl-14-committed-sessions';
+const filtersKey = 'hxwl-14-filters';
+const viewsKey = 'hxwl-14-views';
+const currentViewKey = 'hxwl-14-current-view';
 const seed = [
   { id: crypto.randomUUID(), instrument: '电吉他', piece: 'Blue Bossa', date: '2026-06-01', bpm: 86, minutes: 35, mistakes: 18, note: '和弦转换卡顿', sections: [
     { id: crypto.randomUUID(), name: '前奏', bpm: 80, mistakes: 3, mastery: 3, note: '分解和弦流畅度不够' },
@@ -34,6 +37,23 @@ let records = JSON.parse(localStorage.getItem(key) || 'null') || seed;
 let editingId = null;
 let archiveFilter = '';
 let currentSections = [];
+
+const defaultFilters = {
+  instrument: '',
+  piece: '',
+  dateStart: '',
+  dateEnd: '',
+  bpmMin: '',
+  bpmMax: '',
+  mistakesMin: '',
+  mistakesMax: '',
+  noteKeyword: ''
+};
+
+let filters = JSON.parse(localStorage.getItem(filtersKey) || 'null') || { ...defaultFilters };
+let views = JSON.parse(localStorage.getItem(viewsKey) || 'null') || [];
+let currentViewId = localStorage.getItem(currentViewKey) || '';
+let filterPanelExpanded = true;
 
 let session = JSON.parse(localStorage.getItem(sessionKey) || 'null') || {
   id: null,
@@ -75,6 +95,132 @@ function saveSession() {
 
 function saveCommittedSessions() {
   localStorage.setItem(committedSessionsKey, JSON.stringify(committedSessionIds));
+}
+
+function saveFilters() {
+  localStorage.setItem(filtersKey, JSON.stringify(filters));
+}
+
+function saveViews() {
+  localStorage.setItem(viewsKey, JSON.stringify(views));
+}
+
+function saveCurrentView() {
+  localStorage.setItem(currentViewKey, currentViewId);
+}
+
+function applyFilters(recordsToFilter) {
+  return recordsToFilter.filter(record => {
+    if (filters.instrument && record.instrument !== filters.instrument) return false;
+    if (filters.piece && record.piece !== filters.piece) return false;
+    if (filters.dateStart && record.date < filters.dateStart) return false;
+    if (filters.dateEnd && record.date > filters.dateEnd) return false;
+    if (filters.bpmMin && record.bpm < Number(filters.bpmMin)) return false;
+    if (filters.bpmMax && record.bpm > Number(filters.bpmMax)) return false;
+    if (filters.mistakesMin && record.mistakes < Number(filters.mistakesMin)) return false;
+    if (filters.mistakesMax && record.mistakes > Number(filters.mistakesMax)) return false;
+    if (filters.noteKeyword && record.note && !record.note.includes(filters.noteKeyword)) return false;
+    return true;
+  });
+}
+
+function hasActiveFilters() {
+  return Object.entries(filters).some(([key, value]) => {
+    if (key === 'noteKeyword') return value.trim() !== '';
+    return value !== '' && value !== null && value !== undefined;
+  });
+}
+
+function getActiveFilterCount() {
+  return Object.entries(filters).filter(([key, value]) => {
+    if (key === 'noteKeyword') return value.trim() !== '';
+    return value !== '' && value !== null && value !== undefined;
+  }).length;
+}
+
+function resetFilters() {
+  filters = { ...defaultFilters };
+  currentViewId = '';
+  saveFilters();
+  saveCurrentView();
+  render();
+}
+
+function updateFilter(field, value) {
+  filters[field] = value;
+  currentViewId = '';
+  saveFilters();
+  saveCurrentView();
+  render();
+}
+
+async function saveView(name) {
+  if (!name.trim()) {
+    await showConfirm('提示', '请输入视图名称');
+    return false;
+  }
+  const existingView = views.find(v => v.name === name.trim());
+  if (existingView) {
+    const confirmed = await showConfirm('确认覆盖', '该视图名称已存在，是否覆盖？');
+    if (!confirmed) return false;
+    existingView.filters = { ...filters };
+    existingView.updatedAt = new Date().toISOString();
+  } else {
+    views.push({
+      id: crypto.randomUUID(),
+      name: name.trim(),
+      filters: { ...filters },
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    });
+  }
+  saveViews();
+  return true;
+}
+
+function loadView(viewId) {
+  const view = views.find(v => v.id === viewId);
+  if (!view) return;
+  filters = { ...view.filters };
+  currentViewId = viewId;
+  saveFilters();
+  saveCurrentView();
+  render();
+}
+
+async function deleteView(viewId) {
+  const confirmed = await showConfirm('删除视图', '确定删除该视图？');
+  if (!confirmed) return;
+  views = views.filter(v => v.id !== viewId);
+  if (currentViewId === viewId) {
+    currentViewId = '';
+    saveCurrentView();
+  }
+  saveViews();
+  render();
+}
+
+function getFilterDescription() {
+  const parts = [];
+  if (filters.instrument) parts.push(`乐器: ${filters.instrument}`);
+  if (filters.piece) parts.push(`曲目: ${filters.piece}`);
+  if (filters.dateStart || filters.dateEnd) {
+    const start = filters.dateStart || '不限';
+    const end = filters.dateEnd || '不限';
+    parts.push(`日期: ${start} ~ ${end}`);
+  }
+  if (filters.bpmMin || filters.bpmMax) {
+    const min = filters.bpmMin || '不限';
+    const max = filters.bpmMax || '不限';
+    parts.push(`BPM: ${min} ~ ${max}`);
+  }
+  if (filters.mistakesMin || filters.mistakesMax) {
+    const min = filters.mistakesMin || '不限';
+    const max = filters.mistakesMax || '不限';
+    parts.push(`错误: ${min} ~ ${max}`);
+  }
+  if (filters.noteKeyword) parts.push(`备注: "${filters.noteKeyword}"`);
+  return parts;
 }
 
 function getSessionElapsedMs() {
@@ -597,7 +743,107 @@ document.querySelector('#app').innerHTML = `
       </div>
     </div>
 
+    <div id="promptModal" class="modal" hidden>
+      <div class="modalOverlay"></div>
+      <div class="modalContent">
+        <div class="modalHead">
+          <h2 id="promptTitle">输入</h2>
+          <button class="modalClose" id="promptClose">×</button>
+        </div>
+        <div class="modalBody">
+          <p id="promptMessage" class="muted"></p>
+          <input type="text" id="promptInput" placeholder="" />
+        </div>
+        <div class="modalFoot">
+          <button class="modalCancel" id="promptCancel">取消</button>
+          <button class="primary modalConfirm" id="promptConfirm">确认</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="confirmModal" class="modal" hidden>
+      <div class="modalOverlay"></div>
+      <div class="modalContent">
+        <div class="modalHead">
+          <h2 id="confirmTitle">确认</h2>
+          <button class="modalClose" id="confirmClose">×</button>
+        </div>
+        <div class="modalBody">
+          <p id="confirmMessage"></p>
+        </div>
+        <div class="modalFoot">
+          <button class="modalCancel" id="confirmCancel">取消</button>
+          <button class="primary modalConfirm" id="confirmConfirm">确认</button>
+        </div>
+      </div>
+    </div>
+
     <section class="panel sessionPanel" id="sessionPanel"></section>
+
+    <section class="panel filterPanel">
+      <div class="filterPanelHead" id="filterPanelHead">
+        <div class="filterPanelTitle">
+          <h2>多维度筛选</h2>
+          <span class="filterCount" id="filterCount"></span>
+        </div>
+        <div class="filterPanelActions">
+          <span class="currentViewName" id="currentViewName"></span>
+          <button class="secondary small" id="toggleFilterPanel">${filterPanelExpanded ? '收起' : '展开'}</button>
+        </div>
+      </div>
+      <div class="filterPanelBody" id="filterPanelBody">
+        <div class="viewsBar">
+          <div class="viewsList" id="viewsList"></div>
+          <div class="viewsActions">
+            <button class="secondary small" id="saveViewBtn">💾 保存视图</button>
+            <button class="secondary small" id="resetFiltersBtn">🔄 重置</button>
+          </div>
+        </div>
+        <div class="filterGrid">
+          <div class="filterItem">
+            <label>乐器</label>
+            <select id="filterInstrument">
+              <option value="">全部乐器</option>
+            </select>
+          </div>
+          <div class="filterItem">
+            <label>曲目</label>
+            <select id="filterPiece">
+              <option value="">全部曲目</option>
+            </select>
+          </div>
+          <div class="filterItem">
+            <label>开始日期</label>
+            <input type="date" id="filterDateStart" />
+          </div>
+          <div class="filterItem">
+            <label>结束日期</label>
+            <input type="date" id="filterDateEnd" />
+          </div>
+          <div class="filterItem">
+            <label>最低BPM</label>
+            <input type="number" min="1" step="1" id="filterBpmMin" placeholder="不限" />
+          </div>
+          <div class="filterItem">
+            <label>最高BPM</label>
+            <input type="number" min="1" step="1" id="filterBpmMax" placeholder="不限" />
+          </div>
+          <div class="filterItem">
+            <label>最少错误</label>
+            <input type="number" min="0" step="1" id="filterMistakesMin" placeholder="不限" />
+          </div>
+          <div class="filterItem">
+            <label>最多错误</label>
+            <input type="number" min="0" step="1" id="filterMistakesMax" placeholder="不限" />
+          </div>
+          <div class="filterItem filterItemFull">
+            <label>备注关键词</label>
+            <input type="text" id="filterNoteKeyword" placeholder="输入备注关键词..." />
+          </div>
+        </div>
+        <div class="activeFilters" id="activeFilters"></div>
+      </div>
+    </section>
 
     <section class="panel planPanel">
       <div class="panelHead">
@@ -1185,13 +1431,234 @@ modalConfirm.addEventListener('click', () => {
   alert(`成功导入 ${count} 条练习记录！`);
 });
 
+function showPrompt(title, message, placeholder = '', defaultValue = '') {
+  return new Promise((resolve) => {
+    const modal = document.querySelector('#promptModal');
+    const titleEl = document.querySelector('#promptTitle');
+    const messageEl = document.querySelector('#promptMessage');
+    const inputEl = document.querySelector('#promptInput');
+    const confirmBtn = document.querySelector('#promptConfirm');
+    const cancelBtn = document.querySelector('#promptCancel');
+    const closeBtn = document.querySelector('#promptClose');
+    const overlay = modal.querySelector('.modalOverlay');
+
+    titleEl.textContent = title;
+    messageEl.textContent = message;
+    inputEl.placeholder = placeholder;
+    inputEl.value = defaultValue;
+
+    modal.hidden = false;
+    setTimeout(() => inputEl.focus(), 50);
+
+    const cleanup = () => {
+      modal.hidden = true;
+      confirmBtn.onclick = null;
+      cancelBtn.onclick = null;
+      closeBtn.onclick = null;
+      overlay.onclick = null;
+      inputEl.onkeydown = null;
+    };
+
+    confirmBtn.onclick = () => {
+      const value = inputEl.value;
+      cleanup();
+      resolve(value);
+    };
+
+    cancelBtn.onclick = () => {
+      cleanup();
+      resolve(null);
+    };
+
+    closeBtn.onclick = () => {
+      cleanup();
+      resolve(null);
+    };
+
+    overlay.onclick = () => {
+      cleanup();
+      resolve(null);
+    };
+
+    inputEl.onkeydown = (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        confirmBtn.click();
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        cancelBtn.click();
+      }
+    };
+  });
+}
+
+function showConfirm(title, message) {
+  return new Promise((resolve) => {
+    const modal = document.querySelector('#confirmModal');
+    const titleEl = document.querySelector('#confirmTitle');
+    const messageEl = document.querySelector('#confirmMessage');
+    const confirmBtn = document.querySelector('#confirmConfirm');
+    const cancelBtn = document.querySelector('#confirmCancel');
+    const closeBtn = document.querySelector('#confirmClose');
+    const overlay = modal.querySelector('.modalOverlay');
+
+    titleEl.textContent = title;
+    messageEl.textContent = message;
+
+    modal.hidden = false;
+
+    const cleanup = () => {
+      modal.hidden = true;
+      confirmBtn.onclick = null;
+      cancelBtn.onclick = null;
+      closeBtn.onclick = null;
+      overlay.onclick = null;
+    };
+
+    confirmBtn.onclick = () => {
+      cleanup();
+      resolve(true);
+    };
+
+    cancelBtn.onclick = () => {
+      cleanup();
+      resolve(false);
+    };
+
+    closeBtn.onclick = () => {
+      cleanup();
+      resolve(false);
+    };
+
+    overlay.onclick = () => {
+      cleanup();
+      resolve(false);
+    };
+  });
+}
+
 function save() {
   localStorage.setItem(key, JSON.stringify(records));
+}
+
+function renderFilterPanel() {
+  const instruments = [...new Set(records.map((record) => record.instrument))].sort();
+  const pieces = [...new Set(records.map((record) => record.piece))].sort();
+
+  const filterInstrument = document.querySelector('#filterInstrument');
+  const filterPiece = document.querySelector('#filterPiece');
+  const filterDateStart = document.querySelector('#filterDateStart');
+  const filterDateEnd = document.querySelector('#filterDateEnd');
+  const filterBpmMin = document.querySelector('#filterBpmMin');
+  const filterBpmMax = document.querySelector('#filterBpmMax');
+  const filterMistakesMin = document.querySelector('#filterMistakesMin');
+  const filterMistakesMax = document.querySelector('#filterMistakesMax');
+  const filterNoteKeyword = document.querySelector('#filterNoteKeyword');
+  const filterCount = document.querySelector('#filterCount');
+  const currentViewName = document.querySelector('#currentViewName');
+  const activeFilters = document.querySelector('#activeFilters');
+  const viewsList = document.querySelector('#viewsList');
+  const filterPanelBody = document.querySelector('#filterPanelBody');
+  const toggleBtn = document.querySelector('#toggleFilterPanel');
+
+  filterInstrument.innerHTML = `<option value="">全部乐器</option>${instruments.map(i => `<option value="${escapeHtml(i)}">${escapeHtml(i)}</option>`).join('')}`;
+  filterPiece.innerHTML = `<option value="">全部曲目</option>${pieces.map(p => `<option value="${escapeHtml(p)}">${escapeHtml(p)}</option>`).join('')}`;
+
+  filterInstrument.value = filters.instrument;
+  filterPiece.value = filters.piece;
+  filterDateStart.value = filters.dateStart;
+  filterDateEnd.value = filters.dateEnd;
+  filterBpmMin.value = filters.bpmMin;
+  filterBpmMax.value = filters.bpmMax;
+  filterMistakesMin.value = filters.mistakesMin;
+  filterMistakesMax.value = filters.mistakesMax;
+  filterNoteKeyword.value = filters.noteKeyword;
+
+  const activeCount = getActiveFilterCount();
+  filterCount.textContent = activeCount > 0 ? `${activeCount} 个筛选条件` : '';
+  filterCount.className = `filterCount ${activeCount > 0 ? 'active' : ''}`;
+
+  const currentView = views.find(v => v.id === currentViewId);
+  currentViewName.textContent = currentView ? `📌 ${escapeHtml(currentView.name)}` : '';
+
+  const filterDescriptions = getFilterDescription();
+  if (filterDescriptions.length > 0) {
+    activeFilters.innerHTML = `
+      <span class="activeFiltersLabel">当前筛选:</span>
+      ${filterDescriptions.map(d => `<span class="activeFilterTag">${escapeHtml(d)}</span>`).join('')}
+    `;
+  } else {
+    activeFilters.innerHTML = '<span class="activeFiltersLabel muted">暂无筛选条件，显示全部记录</span>';
+  }
+
+  if (views.length > 0) {
+    viewsList.innerHTML = `
+      <span class="viewsLabel">常用视图:</span>
+      ${views.map(view => `
+        <button class="viewTag ${currentViewId === view.id ? 'active' : ''}" data-view-id="${view.id}">
+          ${escapeHtml(view.name)}
+          <span class="viewTagDel" data-view-del="${view.id}" title="删除视图">×</span>
+        </button>
+      `).join('')}
+    `;
+  } else {
+    viewsList.innerHTML = '<span class="viewsLabel muted">暂无保存的视图</span>';
+  }
+
+  filterPanelBody.style.display = filterPanelExpanded ? 'block' : 'none';
+  toggleBtn.textContent = filterPanelExpanded ? '收起' : '展开';
+
+  filterInstrument.onchange = (e) => updateFilter('instrument', e.target.value);
+  filterPiece.onchange = (e) => updateFilter('piece', e.target.value);
+  filterDateStart.onchange = (e) => updateFilter('dateStart', e.target.value);
+  filterDateEnd.onchange = (e) => updateFilter('dateEnd', e.target.value);
+  filterBpmMin.oninput = (e) => updateFilter('bpmMin', e.target.value);
+  filterBpmMax.oninput = (e) => updateFilter('bpmMax', e.target.value);
+  filterMistakesMin.oninput = (e) => updateFilter('mistakesMin', e.target.value);
+  filterMistakesMax.oninput = (e) => updateFilter('mistakesMax', e.target.value);
+  filterNoteKeyword.oninput = (e) => updateFilter('noteKeyword', e.target.value);
+
+  toggleBtn.onclick = () => {
+    filterPanelExpanded = !filterPanelExpanded;
+    render();
+  };
+
+  document.querySelector('#saveViewBtn').onclick = async () => {
+    const name = await showPrompt('保存视图', '请输入视图名称:', '例如：电吉他练习、最近一周等');
+    if (name !== null && name !== undefined) {
+      const success = await saveView(name);
+      if (success) {
+        render();
+      }
+    }
+  };
+
+  document.querySelector('#resetFiltersBtn').onclick = async () => {
+    const confirmed = await showConfirm('重置筛选', '确定重置所有筛选条件？');
+    if (confirmed) {
+      resetFilters();
+    }
+  };
+
+  document.querySelectorAll('[data-view-id]').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      if (e.target.hasAttribute('data-view-del')) return;
+      loadView(btn.dataset.viewId);
+    });
+  });
+
+  document.querySelectorAll('[data-view-del]').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      await deleteView(btn.dataset.viewDel);
+    });
+  });
 }
 
 function render() {
   syncGoalAchievements();
   renderSessionPanel();
+  renderFilterPanel();
   const selectedPiece = pieceFilter.value;
   const pieces = [...new Set(records.map((record) => record.piece))].sort();
   pieceFilter.innerHTML = `<option value="">全部曲目</option>${pieces.map((piece) => `<option value="${escapeHtml(piece)}">${escapeHtml(piece)}</option>`).join('')}`;
@@ -1205,18 +1672,27 @@ function render() {
 
   renderSections();
   const effectivePieceFilter = archiveFilter || pieceFilter.value;
-  const filtered = records
+  let filtered = records
     .filter((record) => !effectivePieceFilter || record.piece === effectivePieceFilter)
     .filter((record) => [record.instrument, record.piece, record.note].join(' ').includes(search.value.trim()))
     .sort((a, b) => a.date.localeCompare(b.date));
+
+  filtered = applyFilters(filtered);
   const uncompletedCount = planTasks.filter((task) => !task.completed).length;
   const totalEstimated = planTasks.reduce((sum, task) => sum + task.estimatedMinutes, 0);
+  const filteredPieces = [...new Set(filtered.map((record) => record.piece))];
+  const activeFilters = hasActiveFilters();
+  const totalMinutes = filtered.reduce((sum, record) => sum + record.minutes, 0);
+  const avgBpm = filtered.length ? Math.round(avg(filtered.map((record) => record.bpm))) : 0;
+  const recordCount = filtered.length;
+  const avgMistakes = filtered.length ? Math.round(avg(filtered.map((record) => record.mistakes))) : 0;
+
   document.querySelector('#summary').innerHTML = [
-    ['总练习时长', `${records.reduce((sum, record) => sum + record.minutes, 0)}min`],
-    ['曲目数', pieces.length],
-    ['平均BPM', Math.round(avg(records.map((record) => record.bpm)))],
-    ['今日待完成', uncompletedCount + ' 项'],
-    ['预计总时长', totalEstimated + 'min']
+    [activeFilters ? '筛选时长' : '总练习时长', `${totalMinutes}min${activeFilters ? ' / ' + records.reduce((sum, r) => sum + r.minutes, 0) + 'min' : ''}`],
+    [activeFilters ? '筛选曲目' : '曲目数', activeFilters ? `${filteredPieces.length} / ${pieces.length}` : pieces.length],
+    [activeFilters ? '筛选平均BPM' : '平均BPM', activeFilters ? `${avgBpm} / ${Math.round(avg(records.map((r) => r.bpm)))}` : Math.round(avg(records.map((r) => r.bpm)))],
+    ['筛选记录数', `${recordCount} 条`],
+    ['平均错误', `${avgMistakes} 次`]
   ].map(([label, value]) => `<article><span>${label}</span><strong>${value}</strong></article>`).join('');
   drawLine('#bpmChart', filtered.map((record) => ({ label: record.date.slice(5), value: record.bpm })), 'BPM', '#0f766e');
   drawBars('#minutesChart', groupDay(filtered, 'minutes'), 'min', '#d97706');
