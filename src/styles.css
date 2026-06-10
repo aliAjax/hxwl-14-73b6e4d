@@ -1880,3 +1880,348 @@ td button { margin-left: 6px; background: #dff3ef; }
 #historyModal .modalContent {
   max-width: 960px;
 }
+
+.suggestionPanel {
+  margin-top: 18px;
+  background: linear-gradient(135deg, #fdf4ff 0%, #f0f9ff 50%, #f0fdfa 100%);
+  border: 2px solid #c4b5fd;
+}
+
+.suggestionOverview {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin: 12px 0 16px 0;
+}
+
+@media (max-width: 900px) {
+  .suggestionOverview {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.overviewCard {
+  background: white;
+  border: 1px solid #e4efec;
+  border-radius: 8px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.overviewLabel {
+  font-size: 12px;
+  color: #60736f;
+  font-weight: 500;
+}
+
+.overviewValue {
+  font-size: 22px;
+  font-weight: 700;
+  color: #172522;
+}
+
+.overviewSub {
+  font-size: 11px;
+  color: #94a3a0;
+}
+
+.suggestionList {
+  display: grid;
+  gap: 12px;
+}
+
+.suggestionEmpty {
+  text-align: center;
+  padding: 40px 20px;
+  background: white;
+  border-radius: 10px;
+  border: 1px dashed #c4d9d5;
+}
+
+.suggestionEmptyIcon {
+  font-size: 48px;
+  margin-bottom: 12px;
+  display: block;
+}
+
+.suggestionEmptyTitle {
+  font-size: 17px;
+  font-weight: 600;
+  color: #172522;
+  margin: 0 0 6px 0;
+}
+
+.suggestionEmptyDesc {
+  font-size: 14px;
+  color: #60736f;
+  margin: 0;
+  line-height: 1.6;
+}
+
+.suggestionCard {
+  background: white;
+  border-radius: 12px;
+  border: 2px solid;
+  padding: 16px 18px;
+  transition: all 0.2s ease;
+  box-shadow: 0 4px 12px rgba(23, 61, 55, 0.04);
+}
+
+.suggestionCard:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(23, 61, 55, 0.08);
+}
+
+.suggestionHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.suggestionTitleBlock {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+}
+
+.suggestionIcon {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  flex-shrink: 0;
+}
+
+.suggestionTitleWrap {
+  flex: 1;
+  min-width: 0;
+}
+
+.suggestionCategory {
+  font-size: 16px;
+  font-weight: 700;
+  color: #172522;
+  margin: 0 0 4px 0;
+}
+
+.suggestionPiece {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.suggestionPieceName {
+  font-size: 14px;
+  font-weight: 600;
+  color: #172522;
+}
+
+.suggestionPieceMeta {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 500;
+  color: white;
+}
+
+.suggestionPriority {
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.suggestionBody {
+  display: grid;
+  gap: 10px;
+}
+
+.suggestionReason {
+  font-size: 13px;
+  color: #4a5a56;
+  line-height: 1.6;
+  padding: 10px 14px;
+  background: #f6faf8;
+  border-left: 3px solid;
+  border-radius: 6px;
+}
+
+.suggestionAction {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #f0fdfa 0%, #f0f9ff 100%);
+  border: 1px solid #cfe2de;
+}
+
+.suggestionActionIcon {
+  font-size: 18px;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.suggestionActionText {
+  flex: 1;
+  font-size: 14px;
+  color: #172522;
+  font-weight: 500;
+  line-height: 1.5;
+}
+
+.suggestionMetrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.suggestionMetric {
+  background: #f6faf8;
+  border: 1px solid #e4efec;
+  border-radius: 6px;
+  padding: 8px 10px;
+}
+
+.suggestionMetricLabel {
+  font-size: 11px;
+  color: #60736f;
+  font-weight: 500;
+  margin-bottom: 2px;
+}
+
+.suggestionMetricValue {
+  font-size: 16px;
+  font-weight: 700;
+  color: #172522;
+}
+
+.suggestionMetricValue.positive { color: #059669; }
+.suggestionMetricValue.negative { color: #dc2626; }
+.suggestionMetricValue.warning { color: #d97706; }
+.suggestionMetricValue.info { color: #2563eb; }
+
+.suggestionConservative {
+  margin-top: 16px;
+  padding: 14px 16px;
+  background: #f9fafb;
+  border: 1px dashed #d1d5db;
+  border-radius: 10px;
+}
+
+.conservativeHead {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.conservativeIcon {
+  font-size: 20px;
+}
+
+.conservativeTitle {
+  font-size: 15px;
+  font-weight: 600;
+  color: #374151;
+  margin: 0;
+}
+
+.conservativeSummary {
+  font-size: 13px;
+  color: #6b7280;
+  margin: 0 0 10px 0;
+}
+
+.conservativeTracks {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.conservativeTrackItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: white;
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+.conservativeTrackTag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 500;
+  color: white;
+}
+
+.conservativeTrackName {
+  font-weight: 500;
+  color: #374151;
+}
+
+.conservativeTrackMeta {
+  margin-left: auto;
+  color: #6b7280;
+  font-size: 12px;
+}
+
+.conservativeAdvice {
+  font-size: 13px;
+  color: #374151;
+  line-height: 1.6;
+  padding: 10px 12px;
+  background: white;
+  border-radius: 6px;
+  border-left: 3px solid #9ca3af;
+}
+
+.suggestionPriority.p0 { background: #fee2e2; color: #991b1b; }
+.suggestionPriority.p1 { background: #dcfce7; color: #166534; }
+.suggestionPriority.p2 { background: #fef3c7; color: #92400e; }
+.suggestionPriority.p3 { background: #dbeafe; color: #1d4ed8; }
+
+.suggestionTypeTag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: white;
+  flex-shrink: 0;
+}
+
+@media (max-width: 600px) {
+  .suggestionOverview {
+    grid-template-columns: 1fr 1fr;
+  }
+  .suggestionHead {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .suggestionMetrics {
+    grid-template-columns: 1fr 1fr;
+  }
+}

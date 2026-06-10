@@ -1181,6 +1181,16 @@ document.querySelector('#app').innerHTML = `
       <div id="goalDashboard" class="goalDashboardGrid"></div>
     </section>
 
+    <section class="panel suggestionPanel">
+      <div class="panelHead">
+        <h2>🎯 智能练习建议</h2>
+        <span class="muted" id="suggestionMeta"></span>
+      </div>
+      <div id="suggestionOverview" class="suggestionOverview"></div>
+      <div id="suggestionList" class="suggestionList"></div>
+      <div id="suggestionConservative" class="suggestionConservative"></div>
+    </section>
+
     <section class="layout">
       <form id="form" class="panel">
         <h2>练习记录</h2>
@@ -2205,10 +2215,187 @@ function renderFilterPanel() {
   });
 }
 
+function renderSuggestions() {
+  const result = SuggestionEngine.generateSuggestions();
+  const metaEl = document.querySelector('#suggestionMeta');
+  const overviewEl = document.querySelector('#suggestionOverview');
+  const listEl = document.querySelector('#suggestionList');
+  const conservativeEl = document.querySelector('#suggestionConservative');
+
+  if (result.overall && result.overall.type === 'empty') {
+    metaEl.textContent = '';
+    overviewEl.innerHTML = '';
+    listEl.innerHTML = `
+      <div class="suggestionEmpty">
+        <span class="suggestionEmptyIcon">${result.overall.icon}</span>
+        <h3 class="suggestionEmptyTitle">${result.overall.title}</h3>
+        <p class="suggestionEmptyDesc">${result.overall.message}</p>
+      </div>
+    `;
+    conservativeEl.innerHTML = '';
+    return;
+  }
+
+  const { overall, suggestions, conservative } = result;
+  metaEl.textContent = `分析 ${overall.totalRecords} 条记录 · ${overall.activePieces} 首曲目 · 累计 ${overall.totalMinutes} 分钟`;
+
+  const typeCounts = suggestions.reduce((acc, s) => {
+    acc[s.type] = (acc[s.type] || 0) + 1;
+    return acc;
+  }, {});
+
+  overviewEl.innerHTML = `
+    <div class="overviewCard">
+      <span class="overviewLabel">🚀 继续提速</span>
+      <strong class="overviewValue">${typeCounts.speedup || 0}</strong>
+      <span class="overviewSub">表现稳定的曲目</span>
+    </div>
+    <div class="overviewCard">
+      <span class="overviewLabel">🧘 降速巩固</span>
+      <strong class="overviewValue">${typeCounts.slowdown || 0}</strong>
+      <span class="overviewSub">基础需扎实</span>
+    </div>
+    <div class="overviewCard">
+      <span class="overviewLabel">⚠️ 错误异常</span>
+      <strong class="overviewValue">${typeCounts.spike || 0}</strong>
+      <span class="overviewSub">需重点关注</span>
+    </div>
+    <div class="overviewCard">
+      <span class="overviewLabel">📖 长期未碰</span>
+      <strong class="overviewValue">${typeCounts.catchup || 0}</strong>
+      <span class="overviewSub">建议复习</span>
+    </div>
+  `;
+
+  if (suggestions.length === 0) {
+    listEl.innerHTML = `
+      <div class="suggestionEmpty">
+        <span class="suggestionEmptyIcon">✨</span>
+        <h3 class="suggestionEmptyTitle">状态良好，暂无特殊建议</h3>
+        <p class="suggestionEmptyDesc">
+          当前曲目的练习节奏比较平稳。可以继续保持现有节奏练习，或尝试设置更高的目标 BPM 来挑战自己。
+          建议每首曲目至少积累 3 次不同日期的练习后，趋势分析会更加准确。
+        </p>
+      </div>
+    `;
+  } else {
+    listEl.innerHTML = suggestions.map(s => renderSuggestionCard(s)).join('');
+  }
+
+  if (conservative) {
+    conservativeEl.innerHTML = `
+      <div class="conservativeHead">
+        <span class="conservativeIcon">${conservative.icon}</span>
+        <h3 class="conservativeTitle">${conservative.title}</h3>
+      </div>
+      <p class="conservativeSummary">${conservative.summary}</p>
+      <div class="conservativeTracks">
+        ${conservative.tracks.map(t => `
+          <div class="conservativeTrackItem">
+            <span class="conservativeTrackTag" style="background: ${t.pieceType.color}">
+              ${t.pieceType.icon} ${t.pieceType.type}
+            </span>
+            <span class="conservativeTrackName">${escapeHtml(t.piece)}</span>
+            <span class="conservativeTrackMeta">
+              ${escapeHtml(t.instrument)} · ${t.recordCount} 条记录${t.lastDate ? ` · 最近: ${t.lastDate}` : ''}
+            </span>
+          </div>
+        `).join('')}
+      </div>
+      <div class="conservativeAdvice">${conservative.advice}</div>
+    `;
+  } else {
+    conservativeEl.innerHTML = '';
+  }
+
+  listEl.querySelectorAll('[data-suggestion-filter]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      archiveFilter = btn.dataset.suggestionFilter;
+      render();
+      document.querySelector('#rows').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  });
+}
+
+function renderSuggestionCard(s) {
+  const priorityLabels = { 0: '紧急', 1: '推荐', 2: '建议', 3: '关注' };
+  const metricsByType = {
+    speedup: [
+      { label: '起始BPM', value: s.metrics.bpmFrom, cls: '' },
+      { label: '当前BPM', value: s.metrics.bpmTo, cls: 'positive' },
+      { label: '已提升', value: `+${s.metrics.bpmGain}`, cls: 'positive' },
+      { label: '建议BPM', value: s.metrics.suggestedBpm, cls: 'positive' }
+    ],
+    slowdown: [
+      { label: '当前BPM', value: s.metrics.currentBpm, cls: 'warning' },
+      { label: '安全BPM', value: s.metrics.safeBpm, cls: '' },
+      { label: '错误升高', value: `+${s.metrics.mistakeDelta}次`, cls: 'negative' }
+    ],
+    catchup: [
+      { label: '未练习天数', value: `${s.metrics.daysSince}天`, cls: s.metrics.daysSince >= 21 ? 'negative' : 'warning' },
+      { label: '上次BPM', value: s.metrics.lastBpm, cls: '' },
+      { label: '历史最高', value: s.metrics.maxBpm, cls: 'positive' },
+      { label: '热身BPM', value: s.metrics.warmupBpm, cls: 'info' }
+    ],
+    spike: [
+      { label: '最近错误', value: `${s.metrics.latestMistakes}次`, cls: 'negative' },
+      { label: '之前均值', value: `${s.metrics.avgPrev}次`, cls: '' },
+      { label: '升高倍数', value: `${s.metrics.spikeRatio}x`, cls: 'negative' },
+      { label: '建议BPM', value: s.metrics.suggestedBpm, cls: 'warning' }
+    ]
+  };
+
+  const metrics = metricsByType[s.type] || [];
+
+  return `
+    <article class="suggestionCard" style="border-color: ${s.color}20;">
+      <div class="suggestionHead">
+        <div class="suggestionTitleBlock">
+          <div class="suggestionIcon" style="background: ${s.color}15;">${s.icon}</div>
+          <div class="suggestionTitleWrap">
+            <h3 class="suggestionCategory">${s.title}</h3>
+            <div class="suggestionPiece">
+              <span class="suggestionPieceName">${escapeHtml(s.piece)}</span>
+              <span class="suggestionPieceMeta" style="background: ${s.pieceType.color}">
+                ${s.pieceType.icon} ${s.pieceType.type}
+              </span>
+              <span class="muted" style="font-size: 12px;">${escapeHtml(s.instrument)}</span>
+            </div>
+          </div>
+        </div>
+        <span class="suggestionPriority p${s.priority}">${priorityLabels[s.priority] || '建议'}</span>
+      </div>
+      <div class="suggestionBody">
+        <div class="suggestionReason" style="border-left-color: ${s.color};">
+          ${s.reason}
+        </div>
+        ${metrics.length ? `
+          <div class="suggestionMetrics">
+            ${metrics.map(m => `
+              <div class="suggestionMetric">
+                <div class="suggestionMetricLabel">${m.label}</div>
+                <div class="suggestionMetricValue ${m.cls}">${m.value}</div>
+              </div>
+            `).join('')}
+          </div>
+        ` : ''}
+        <div class="suggestionAction">
+          <span class="suggestionActionIcon">💡</span>
+          <div class="suggestionActionText">${s.suggestion}</div>
+        </div>
+        <button type="button" class="secondary small" data-suggestion-filter="${escapeHtml(s.piece)}" style="justify-self: start; margin-top: 4px;">
+          🔍 查看该曲目记录
+        </button>
+      </div>
+    </article>
+  `;
+}
+
 function render() {
   syncGoalAchievements();
   renderSessionPanel();
   renderFilterPanel();
+  renderSuggestions();
   const selectedPiece = pieceFilter.value;
   const pieces = [...new Set(records.map((record) => record.piece))].sort();
   pieceFilter.innerHTML = `<option value="">全部曲目</option>${pieces.map((piece) => `<option value="${escapeHtml(piece)}">${escapeHtml(piece)}</option>`).join('')}`;
@@ -2694,6 +2881,256 @@ function getTrackStats() {
     };
   }).sort((a, b) => b.lastDate.localeCompare(a.lastDate));
 }
+
+const SuggestionEngine = (() => {
+  const MIN_RECORDS_FOR_TREND = 3;
+  const LONG_ABSENCE_DAYS = 14;
+  const MISTAKE_SPIKE_RATIO = 1.8;
+  const BPM_BOOST_STABLE_RATIO = 0.7;
+
+  function daysBetween(dateStr1, dateStr2) {
+    const d1 = new Date(dateStr1);
+    const d2 = new Date(dateStr2);
+    return Math.round((d2 - d1) / (1000 * 60 * 60 * 24));
+  }
+
+  function getDaysSinceLastPractice(lastDateStr) {
+    return daysBetween(lastDateStr, getToday());
+  }
+
+  function classifyPieceType(pieceName) {
+    const lower = pieceName.toLowerCase();
+    if (/(bossa|samba|latino)/.test(lower)) return { type: '拉丁爵士', color: '#f59e0b', icon: '🌴' };
+    if (/(blues|蓝调)/.test(lower)) return { type: '布鲁斯', color: '#7c3aed', icon: '🎸' };
+    if (/(ballad|慢歌|抒情)/.test(lower)) return { type: '抒情慢歌', color: '#ec4899', icon: '💝' };
+    if (/(rock|摇滚|metal|金属)/.test(lower)) return { type: '摇滚/金属', color: '#dc2626', icon: '🔥' };
+    if (/(classical|古典|bach|mozart|beethoven)/.test(lower)) return { type: '古典音乐', color: '#0891b2', icon: '🎻' };
+    if (/(pop|流行)/.test(lower)) return { type: '流行音乐', color: '#06b6d4', icon: '🎤' };
+    if (/(jazz|爵士|autumn|blue|standard)/.test(lower)) return { type: '标准爵士', color: '#8b5cf6', icon: '🎷' };
+    return { type: '通用练习曲', color: '#6366f1', icon: '🎵' };
+  }
+
+  function analyzeBpmTrend(sortedRecords) {
+    if (sortedRecords.length < MIN_RECORDS_FOR_TREND) return { trend: 'insufficient', slope: 0 };
+    const bpms = sortedRecords.map(r => r.bpm);
+    const totalDelta = bpms[bpms.length - 1] - bpms[0];
+    const avgInterval = daysBetween(sortedRecords[0].date, sortedRecords[sortedRecords.length - 1].date) / (sortedRecords.length - 1);
+    const slope = avgInterval > 0 ? totalDelta / avgInterval : 0;
+    const consecutiveRises = bpms.slice(1).filter((b, i) => b >= bpms[i]).length;
+    if (consecutiveRises >= bpms.length - 1 && totalDelta > 0) return { trend: 'rising', slope, totalDelta };
+    if (totalDelta < 0) return { trend: 'falling', slope, totalDelta };
+    return { trend: 'stable', slope, totalDelta };
+  }
+
+  function analyzeMistakeTrend(sortedRecords) {
+    if (sortedRecords.length < MIN_RECORDS_FOR_TREND) return { trend: 'insufficient', spike: false };
+    const mistakes = sortedRecords.map(r => r.mistakes);
+    const totalDelta = mistakes[mistakes.length - 1] - mistakes[0];
+    const avgPrev = mistakes.slice(0, -1).reduce((a, b) => a + b, 0) / Math.max(1, mistakes.length - 1);
+    const lastMistakes = mistakes[mistakes.length - 1];
+    const spike = avgPrev > 0 && lastMistakes >= avgPrev * MISTAKE_SPIKE_RATIO && mistakes.length >= 2;
+    if (spike) return { trend: 'spiking', totalDelta, spike, spikeRatio: (lastMistakes / avgPrev).toFixed(1) };
+    if (totalDelta < -2) return { trend: 'improving', totalDelta, spike };
+    if (totalDelta > 2) return { trend: 'worsening', totalDelta, spike };
+    return { trend: 'stable', totalDelta, spike };
+  }
+
+  function shouldSpeedUp(track, bpmAnalysis, mistakeAnalysis) {
+    if (track.records.length < MIN_RECORDS_FOR_TREND) return null;
+    const recentRecords = track.records.slice(-3);
+    const bpmRising = bpmAnalysis.trend === 'rising';
+    const mistakesControlled = mistakeAnalysis.trend === 'improving' || mistakeAnalysis.trend === 'stable';
+    const latestBpm = track.records[track.records.length - 1].bpm;
+    const avgMistakesRecent = recentRecords.reduce((s, r) => s + r.mistakes, 0) / recentRecords.length;
+    if (bpmRising && mistakesControlled && avgMistakesRecent <= Math.max(5, track.records[0].mistakes * BPM_BOOST_STABLE_RATIO + 10)) {
+      const suggestBpm = Math.min(latestBpm + Math.max(2, Math.round(bpmAnalysis.totalDelta / (track.records.length - 1) || 2)), Math.round(latestBpm * 1.08));
+      return {
+        type: 'speedup',
+        title: '继续提速',
+        icon: '🚀',
+        color: '#059669',
+        piece: track.piece,
+        instrument: track.instrument,
+        pieceType: classifyPieceType(track.piece),
+        reason: `最近 ${track.records.length} 次练习中，BPM 从 ${track.records[0].bpm} 提升至 ${latestBpm}，错误次数${mistakeAnalysis.trend === 'improving' ? '持续下降' : '控制良好'}，表现稳定。`,
+        suggestion: `建议下次练习尝试 BPM ${suggestBpm}（当前最高 ${track.maxBpm}），巩固速度后再继续上调。`,
+        metrics: {
+          bpmFrom: track.records[0].bpm,
+          bpmTo: latestBpm,
+          bpmGain: latestBpm - track.records[0].bpm,
+          suggestedBpm: suggestBpm
+        },
+        priority: 1
+      };
+    }
+    return null;
+  }
+
+  function shouldSlowDown(track, bpmAnalysis, mistakeAnalysis) {
+    if (track.records.length < MIN_RECORDS_FOR_TREND) return null;
+    const latest = track.records[track.records.length - 1];
+    const prev = track.records.slice(0, -1);
+    const avgBpmPrev = prev.reduce((s, r) => s + r.bpm, 0) / Math.max(1, prev.length);
+    const avgMistakesPrev = prev.reduce((s, r) => s + r.mistakes, 0) / Math.max(1, prev.length);
+    const bpmJumped = latest.bpm > avgBpmPrev * 1.06;
+    const mistakesSurge = latest.mistakes > avgMistakesPrev * 1.6;
+    if ((bpmAnalysis.trend === 'rising' && mistakeAnalysis.trend === 'worsening') || (bpmJumped && mistakesSurge)) {
+      const conservativeBpm = Math.round(avgBpmPrev * 0.95);
+      return {
+        type: 'slowdown',
+        title: '降低速度巩固',
+        icon: '🧘',
+        color: '#d97706',
+        piece: track.piece,
+        instrument: track.instrument,
+        pieceType: classifyPieceType(track.piece),
+        reason: `BPM 从 ${Math.round(avgBpmPrev)} 快速提升至 ${latest.bpm}，但错误次数从平均 ${Math.round(avgMistakesPrev)} 次升高到 ${latest.mistakes} 次，基础还不够扎实。`,
+        suggestion: `建议降回 BPM ${conservativeBpm} 反复打磨 2-3 次，确保错误次数回到 ${Math.round(avgMistakesPrev)} 以下后再逐步提速。`,
+        metrics: {
+          currentBpm: latest.bpm,
+          safeBpm: conservativeBpm,
+          mistakeDelta: latest.mistakes - Math.round(avgMistakesPrev)
+        },
+        priority: 2
+      };
+    }
+    return null;
+  }
+
+  function shouldCatchUp(track) {
+    const daysSince = getDaysSinceLastPractice(track.lastDate);
+    if (daysSince >= LONG_ABSENCE_DAYS) {
+      const latest = track.records[track.records.length - 1];
+      const warmupBpm = Math.max(Math.round(track.maxBpm * 0.75), latest.bpm - 15);
+      return {
+        type: 'catchup',
+        title: '补练长期未碰曲目',
+        icon: '📖',
+        color: '#2563eb',
+        piece: track.piece,
+        instrument: track.instrument,
+        pieceType: classifyPieceType(track.piece),
+        reason: `距离上次练习已经过去 ${daysSince} 天（${track.lastDate}），肌肉记忆可能已经生疏，最高曾达到 ${track.maxBpm} BPM。`,
+        suggestion: `先以 BPM ${warmupBpm} 热身 15-20 分钟唤醒记忆，再逐步恢复到日常水平。建议优先安排在本周前半周练习。`,
+        metrics: {
+          daysSince,
+          lastBpm: latest.bpm,
+          maxBpm: track.maxBpm,
+          warmupBpm
+        },
+        priority: daysSince >= 21 ? 0 : 3
+      };
+    }
+    return null;
+  }
+
+  function hasMistakeSpike(track, mistakeAnalysis) {
+    if (mistakeAnalysis.spike) {
+      const latest = track.records[track.records.length - 1];
+      const prevRecords = track.records.slice(0, -1);
+      const avgMistakesPrev = prevRecords.reduce((s, r) => s + r.mistakes, 0) / Math.max(1, prevRecords.length);
+      const suggestedBpm = Math.max(latest.bpm - 10, Math.round(latest.bpm * 0.9));
+      return {
+        type: 'spike',
+        title: '错误次数异常升高',
+        icon: '⚠️',
+        color: '#dc2626',
+        piece: track.piece,
+        instrument: track.instrument,
+        pieceType: classifyPieceType(track.piece),
+        reason: `最近一次练习（${latest.date}）错误 ${latest.mistakes} 次，是之前均值 ${Math.round(avgMistakesPrev)} 次的 ${mistakeAnalysis.spikeRatio} 倍。`,
+        suggestion: `将 BPM 调至 ${suggestedBpm} 慢速精读，重点复盘出错段落。可拆分片段慢练，待错误回落至 ${Math.round(avgMistakesPrev * 1.2)} 以下再恢复原速。`,
+        metrics: {
+          latestMistakes: latest.mistakes,
+          avgPrev: Math.round(avgMistakesPrev),
+          spikeRatio: mistakeAnalysis.spikeRatio,
+          suggestedBpm
+        },
+        priority: 0
+      };
+    }
+    return null;
+  }
+
+  function generateInsufficientDataNote(trackStats) {
+    const newTracks = trackStats.filter(t => t.records.length < MIN_RECORDS_FOR_TREND);
+    if (newTracks.length === 0) return null;
+    return {
+      type: 'conservative',
+      title: '数据不足，保守提示',
+      icon: '💡',
+      color: '#6b7280',
+      summary: newTracks.length === 1
+        ? `「${newTracks[0].piece}」仅有 ${newTracks[0].records.length} 条记录`
+        : `有 ${newTracks.length} 首曲目记录不足（${MIN_RECORDS_FOR_TREND} 条以下）`,
+      tracks: newTracks.map(t => ({
+        piece: t.piece,
+        instrument: t.instrument,
+        recordCount: t.records.length,
+        lastDate: t.lastDate,
+        pieceType: classifyPieceType(t.piece)
+      })),
+      advice: `建议每首曲目积累至少 ${MIN_RECORDS_FOR_TREND} 次不同日期的练习后，系统才能可靠地分析趋势。现阶段请结合自我感受调整练习节奏，不要过度依赖单次练习的结果。`,
+      priority: 99
+    };
+  }
+
+  function generateSuggestions() {
+    const trackStats = getTrackStats();
+    const allSuggestions = [];
+
+    if (records.length === 0) {
+      return {
+        overall: {
+          type: 'empty',
+          title: '暂无练习数据',
+          icon: '🎯',
+          color: '#6b7280',
+          message: '添加第一条练习记录后，系统将自动为你生成智能练习建议。'
+        },
+        suggestions: [],
+        conservative: null
+      };
+    }
+
+    trackStats.forEach((track) => {
+      const bpmAnalysis = analyzeBpmTrend(track.records);
+      const mistakeAnalysis = analyzeMistakeTrend(track.records);
+      const analyses = [
+        hasMistakeSpike(track, mistakeAnalysis),
+        shouldSlowDown(track, bpmAnalysis, mistakeAnalysis),
+        shouldSpeedUp(track, bpmAnalysis, mistakeAnalysis),
+        shouldCatchUp(track)
+      ].filter(Boolean);
+      allSuggestions.push(...analyses);
+    });
+
+    allSuggestions.sort((a, b) => a.priority - b.priority);
+    const conservative = generateInsufficientDataNote(trackStats);
+
+    const totalMinutes = records.reduce((s, r) => s + r.minutes, 0);
+    const activePieces = trackStats.length;
+    const avgDaysBetween = trackStats.length
+      ? Math.round(trackStats.reduce((s, t) => {
+          const d = getDaysSinceLastPractice(t.lastDate);
+          return s + (d <= LONG_ABSENCE_DAYS ? d : 0);
+        }, 0) / Math.max(1, trackStats.filter(t => getDaysSinceLastPractice(t.lastDate) <= LONG_ABSENCE_DAYS).length))
+      : 0;
+
+    return {
+      overall: {
+        totalRecords: records.length,
+        totalMinutes,
+        activePieces,
+        avgDaysBetween
+      },
+      suggestions: allSuggestions,
+      conservative
+    };
+  }
+
+  return { generateSuggestions, classifyPieceType };
+})();
 
 function drawTrendLine(data, color) {
   if (!data.length) return '';
