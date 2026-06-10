@@ -165,10 +165,15 @@ function endSession() {
     note: session.note || `计时练习，实际时长 ${formatDuration(elapsedMs)}`
   };
 
-  records = [item, ...records];
+  const hasDuplicateRecord = isDuplicate(item, records);
+  if (!hasDuplicateRecord) {
+    records = [item, ...records];
+    save();
+  } else {
+    alert('已存在相同练习记录，本次会话不会重复保存');
+  }
   committedSessionIds.push(session.id);
   saveCommittedSessions();
-  save();
 
   session = {
     id: null,
@@ -749,6 +754,10 @@ form.addEventListener('submit', (event) => {
     id: editingId || crypto.randomUUID(),
     sections: currentSections.length ? [...currentSections] : undefined
   };
+  if (!editingId && isDuplicate(item, records)) {
+    alert('已存在相同练习记录，请勿重复提交');
+    return;
+  }
   records = editingId ? records.map((record) => (record.id === editingId ? item : record)) : [item, ...records];
   editingId = null;
   currentSections = [];
