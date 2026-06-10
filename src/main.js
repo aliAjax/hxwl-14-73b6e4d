@@ -8,6 +8,43 @@ const committedSessionsKey = 'hxwl-14-committed-sessions';
 const filtersKey = 'hxwl-14-filters';
 const viewsKey = 'hxwl-14-views';
 const currentViewKey = 'hxwl-14-current-view';
+const libraryKey = 'hxwl-14-music-library';
+
+const librarySeed = [
+  {
+    id: crypto.randomUUID(),
+    name: 'Blue Bossa',
+    instrument: '电吉他',
+    genre: '拉丁爵士',
+    targetBpm: 120,
+    defaultSections: [
+      { name: '前奏', note: '分解和弦进入' },
+      { name: '主歌', note: '和弦转换重点' },
+      { name: '副歌', note: '扫弦节奏' },
+      { name: 'Solo', note: '即兴练习' }
+    ],
+    referenceLinks: [
+      { label: '原版录音', url: 'https://example.com/blue-bossa' }
+    ],
+    practiceNotes: '注意 ii-V-I 进行的流畅度，Bossa Nova 节奏要稳定。',
+    createdAt: new Date().toISOString()
+  },
+  {
+    id: crypto.randomUUID(),
+    name: 'Autumn Leaves',
+    instrument: '键盘',
+    genre: '标准爵士',
+    targetBpm: 100,
+    defaultSections: [
+      { name: '前奏', note: '左手根音配合' },
+      { name: '主歌', note: '旋律声部' },
+      { name: '副歌', note: '和弦转换' }
+    ],
+    referenceLinks: [],
+    practiceNotes: '左手 walking bass 要稳定，右手旋律保持歌唱性。',
+    createdAt: new Date().toISOString()
+  }
+];
 const seed = [
   { id: crypto.randomUUID(), instrument: '电吉他', piece: 'Blue Bossa', date: '2026-06-01', bpm: 86, minutes: 35, mistakes: 18, note: '和弦转换卡顿', sections: [
     { id: crypto.randomUUID(), name: '前奏', bpm: 80, mistakes: 3, mastery: 3, note: '分解和弦流畅度不够' },
@@ -297,6 +334,154 @@ const VersionManager = (() => {
     deepClone
   };
 })();
+
+const LibraryManager = (() => {
+  function loadLibrary() {
+    try {
+      const raw = JSON.parse(localStorage.getItem(libraryKey) || 'null');
+      if (raw && Array.isArray(raw) && raw.length > 0) {
+        return raw;
+      }
+      const seeded = JSON.parse(JSON.stringify(librarySeed));
+      localStorage.setItem(libraryKey, JSON.stringify(seeded));
+      return seeded;
+    } catch {
+      const seeded = JSON.parse(JSON.stringify(librarySeed));
+      localStorage.setItem(libraryKey, JSON.stringify(seeded));
+      return seeded;
+    }
+  }
+
+  function saveLibrary(data) {
+    localStorage.setItem(libraryKey, JSON.stringify(data));
+  }
+
+  function getAll() {
+    return loadLibrary().sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+  }
+
+  function getById(id) {
+    return loadLibrary().find(item => item.id === id) || null;
+  }
+
+  function getByName(name) {
+    return loadLibrary().find(item => item.name === name) || null;
+  }
+
+  function add(item) {
+    const data = loadLibrary();
+    const newItem = {
+      id: crypto.randomUUID(),
+      name: (item.name || '').trim(),
+      instrument: (item.instrument || '').trim(),
+      genre: (item.genre || '').trim(),
+      targetBpm: item.targetBpm ? Number(item.targetBpm) : null,
+      defaultSections: Array.isArray(item.defaultSections) ? item.defaultSections.filter(s => s && s.name && s.name.trim()) : [],
+      referenceLinks: Array.isArray(item.referenceLinks) ? item.referenceLinks.filter(l => l && l.url && l.url.trim()) : [],
+      practiceNotes: (item.practiceNotes || '').trim(),
+      createdAt: new Date().toISOString()
+    };
+    if (!newItem.name) {
+      return { success: false, error: '曲目名称不能为空' };
+    }
+    if (data.some(d => d.name === newItem.name)) {
+      return { success: false, error: '该曲目名称已存在' };
+    }
+    data.push(newItem);
+    saveLibrary(data);
+    return { success: true, item: newItem };
+  }
+
+  function update(id, updates) {
+    const data = loadLibrary();
+    const index = data.findIndex(item => item.id === id);
+    if (index === -1) {
+      return { success: false, error: '曲目不存在' };
+    }
+    const existing = data[index];
+    const updatedName = (updates.name || existing.name).trim();
+    if (!updatedName) {
+      return { success: false, error: '曲目名称不能为空' };
+    }
+    if (data.some((d, i) => i !== index && d.name === updatedName)) {
+      return { success: false, error: '该曲目名称已存在' };
+    }
+    data[index] = {
+      ...existing,
+      name: updatedName,
+      instrument: (updates.instrument !== undefined ? updates.instrument : existing.instrument || '').trim(),
+      genre: (updates.genre !== undefined ? updates.genre : existing.genre || '').trim(),
+      targetBpm: updates.targetBpm !== undefined ? (updates.targetBpm ? Number(updates.targetBpm) : null) : existing.targetBpm,
+      defaultSections: updates.defaultSections !== undefined
+        ? updates.defaultSections.filter(s => s && s.name && s.name.trim())
+        : existing.defaultSections || [],
+      referenceLinks: updates.referenceLinks !== undefined
+        ? updates.referenceLinks.filter(l => l && l.url && l.url.trim())
+        : existing.referenceLinks || [],
+      practiceNotes: updates.practiceNotes !== undefined ? (updates.practiceNotes || '').trim() : existing.practiceNotes || '',
+      updatedAt: new Date().toISOString()
+    };
+    saveLibrary(data);
+    return { success: true, item: data[index] };
+  }
+
+  function remove(id) {
+    const data = loadLibrary();
+    const filtered = data.filter(item => item.id !== id);
+    if (filtered.length === data.length) {
+      return { success: false, error: '曲目不存在' };
+    }
+    saveLibrary(filtered);
+    return { success: true };
+  }
+
+  function getPieceDisplayName(pieceName) {
+    if (!pieceName) return '';
+    return pieceName;
+  }
+
+  function resolvePieceInfo(pieceValue) {
+    if (!pieceValue) return { name: '', instrument: '', targetBpm: null, defaultSections: [] };
+    if (typeof pieceValue === 'string') {
+      const item = getByName(pieceValue);
+      if (item) {
+        return {
+          name: item.name,
+          instrument: item.instrument,
+          targetBpm: item.targetBpm,
+          defaultSections: item.defaultSections || []
+        };
+      }
+      return { name: pieceValue, instrument: '', targetBpm: null, defaultSections: [] };
+    }
+    if (typeof pieceValue === 'object' && pieceValue.name) {
+      return {
+        name: pieceValue.name,
+        instrument: pieceValue.instrument || '',
+        targetBpm: pieceValue.targetBpm || null,
+        defaultSections: pieceValue.defaultSections || []
+      };
+    }
+    return { name: '', instrument: '', targetBpm: null, defaultSections: [] };
+  }
+
+  return {
+    getAll,
+    getById,
+    getByName,
+    add,
+    update,
+    remove,
+    resolvePieceInfo,
+    getPieceDisplayName
+  };
+})();
+
+let library = LibraryManager.getAll();
+
+function refreshLibrary() {
+  library = LibraryManager.getAll();
+}
 
 const vmInitResult = VersionManager.init();
 let records = vmInitResult.records;
@@ -657,12 +842,20 @@ function renderSessionPanel() {
   const instruments = [...new Set(records.map((record) => record.instrument))].sort();
 
   if (session.status === 'idle') {
+    refreshLibrary();
     panel.innerHTML = `
       <div class="panelHead">
         <h2>练习会话计时</h2>
         <span class="muted">开始新的练习</span>
       </div>
       <form id="sessionForm" class="sessionForm">
+        <div class="pieceSelectWrap small">
+          <label class="pieceSelectLabel">📚 从资料库选择</label>
+          <select id="sessionLibrarySelect" class="pieceLibrarySelect small">
+            <option value="">手动输入...</option>
+            ${library.map(item => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.name)}${item.targetBpm ? ` (目标 ${item.targetBpm} BPM)` : ''}</option>`).join('')}
+          </select>
+        </div>
         <div class="pair">
           <select name="instrument" required>
             <option value="">选择乐器</option>
@@ -683,6 +876,41 @@ function renderSessionPanel() {
     `;
 
     document.querySelector('#startSessionBtn').addEventListener('click', startSession);
+    const sessionLibSelect = document.querySelector('#sessionLibrarySelect');
+    if (sessionLibSelect) {
+      sessionLibSelect.addEventListener('change', (e) => {
+        const libId = e.target.value;
+        if (!libId) return;
+        const item = LibraryManager.getById(libId);
+        if (!item) return;
+        const sessionForm = document.querySelector('#sessionForm');
+        if (!sessionForm) return;
+        const instrumentSelect = sessionForm.querySelector('select[name="instrument"]');
+        const pieceInput = sessionForm.querySelector('input[name="piece"]');
+        const bpmInput = sessionForm.querySelector('input[name="targetBpm"]');
+        if (item.instrument && instrumentSelect) {
+          let found = false;
+          for (const opt of instrumentSelect.options) {
+            if (opt.value === item.instrument) {
+              instrumentSelect.value = item.instrument;
+              found = true;
+              break;
+            }
+          }
+          if (!found) {
+            const newOpt = document.createElement('option');
+            newOpt.value = item.instrument;
+            newOpt.textContent = item.instrument;
+            instrumentSelect.appendChild(newOpt);
+            instrumentSelect.value = item.instrument;
+          }
+        }
+        if (pieceInput) pieceInput.value = item.name;
+        if (item.targetBpm && bpmInput && !bpmInput.value) {
+          bpmInput.value = item.targetBpm;
+        }
+      });
+    }
   } else {
     const elapsed = getSessionElapsedMs();
     const isRunning = session.status === 'running';
@@ -1145,6 +1373,12 @@ document.querySelector('#app').innerHTML = `
         <span class="planDate">${getToday()}</span>
       </div>
       <form id="planForm" class="planForm">
+        <div class="pieceSelectWrap small">
+          <label class="pieceSelectLabel">📚 从资料库选择</label>
+          <select id="planLibrarySelect" class="pieceLibrarySelect small">
+            <option value="">手动输入...</option>
+          </select>
+        </div>
         <input name="piece" placeholder="曲目" required />
         <div class="pair">
           <input name="targetBpm" type="number" min="1" step="1" placeholder="目标BPM" required />
@@ -1161,6 +1395,12 @@ document.querySelector('#app').innerHTML = `
         <span class="muted" id="goalsSummary"></span>
       </div>
       <form id="goalForm" class="goalForm">
+        <div class="pieceSelectWrap small">
+          <label class="pieceSelectLabel">📚 从资料库选择</label>
+          <select id="goalLibrarySelect" class="pieceLibrarySelect small">
+            <option value="">手动选择曲目...</option>
+          </select>
+        </div>
         <div class="pair">
           <select name="piece" required>
             <option value="">选择曲目</option>
@@ -1194,6 +1434,12 @@ document.querySelector('#app').innerHTML = `
     <section class="layout">
       <form id="form" class="panel">
         <h2>练习记录</h2>
+        <div class="pieceSelectWrap">
+          <label class="pieceSelectLabel">📚 从资料库选择曲目（可选，自动带出信息）</label>
+          <select id="formLibrarySelect" class="pieceLibrarySelect">
+            <option value="">手动输入...</option>
+          </select>
+        </div>
         <input name="instrument" placeholder="乐器" required />
         <input name="piece" placeholder="曲目" required />
         <input name="date" type="date" required />
@@ -1237,6 +1483,55 @@ document.querySelector('#app').innerHTML = `
       <div class="tableWrap"><table><thead><tr><th>日期</th><th>乐器</th><th>曲目</th><th>BPM</th><th>时长</th><th>错误</th><th></th></tr></thead><tbody id="rows"></tbody></table></div>
     </section>
 
+    <section class="panel libraryPanel">
+      <div class="panelHead">
+        <h2>📚 曲目资料库</h2>
+        <span class="muted" id="libraryCount"></span>
+      </div>
+      <form id="libraryForm" class="libraryForm">
+        <div class="pair">
+          <input name="name" placeholder="曲目名称 *" required />
+          <select name="instrument" required>
+            <option value="">选择乐器 *</option>
+            <option value="电吉他">电吉他</option>
+            <option value="木吉他">木吉他</option>
+            <option value="贝斯">贝斯</option>
+            <option value="键盘">键盘</option>
+            <option value="钢琴">钢琴</option>
+            <option value="鼓">鼓</option>
+            <option value="小提琴">小提琴</option>
+            <option value="声乐">声乐</option>
+            <option value="其他">其他</option>
+          </select>
+        </div>
+        <div class="pair">
+          <input name="genre" placeholder="曲风（如：爵士、摇滚、古典）" />
+          <input name="targetBpm" type="number" min="1" step="1" placeholder="目标BPM" />
+        </div>
+        <div class="librarySubSection">
+          <div class="librarySubHead">
+            <span>默认片段</span>
+            <button type="button" class="secondary small" id="addLibSectionBtn">+ 添加片段</button>
+          </div>
+          <div id="libSectionsList" class="libSectionsList"></div>
+        </div>
+        <div class="librarySubSection">
+          <div class="librarySubHead">
+            <span>参考链接</span>
+            <button type="button" class="secondary small" id="addLibLinkBtn">+ 添加链接</button>
+          </div>
+          <div id="libLinksList" class="libLinksList"></div>
+        </div>
+        <textarea name="practiceNotes" placeholder="练习备注（技巧难点、练习建议等）"></textarea>
+        <div class="libraryFormActions">
+          <button type="submit" class="primary" id="libSubmitBtn">➕ 添加到资料库</button>
+          <button type="button" class="secondary" id="libResetBtn" hidden>取消编辑</button>
+        </div>
+        <input type="hidden" name="editingId" value="" />
+      </form>
+      <div id="libraryList" class="libraryList"></div>
+    </section>
+
     <section class="panel">
       <div class="panelHead"><h2>曲目档案</h2><span class="muted" id="archiveCount"></span></div>
       <div id="trackArchive" class="trackArchive"></div>
@@ -1249,6 +1544,10 @@ const search = document.querySelector('#search');
 const pieceFilter = document.querySelector('#pieceFilter');
 const planForm = document.querySelector('#planForm');
 const goalForm = document.querySelector('#goalForm');
+const libraryForm = document.querySelector('#libraryForm');
+
+let libSections = [];
+let libLinks = [];
 
 planForm.addEventListener('submit', (event) => {
   event.preventDefault();
@@ -2401,6 +2700,106 @@ function render() {
   pieceFilter.innerHTML = `<option value="">全部曲目</option>${pieces.map((piece) => `<option value="${escapeHtml(piece)}">${escapeHtml(piece)}</option>`).join('')}`;
   const goalPieceSelect = goalForm.querySelector('select[name="piece"]');
   goalPieceSelect.innerHTML = `<option value="">选择曲目</option>${pieces.map((piece) => `<option value="${escapeHtml(piece)}">${escapeHtml(piece)}</option>`).join('')}`;
+
+  refreshLibrary();
+  const formLibSelect = document.querySelector('#formLibrarySelect');
+  if (formLibSelect) {
+    const currentVal = formLibSelect.value;
+    formLibSelect.innerHTML = `<option value="">手动输入...</option>${library.map(item => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.name)}${item.instrument ? ` (${escapeHtml(item.instrument)})` : ''}</option>`).join('')}`;
+    formLibSelect.value = currentVal;
+    if (!formLibSelect.dataset.bound) {
+      formLibSelect.dataset.bound = '1';
+      formLibSelect.addEventListener('change', (e) => {
+        const libId = e.target.value;
+        if (!libId) return;
+        const item = LibraryManager.getById(libId);
+        if (!item) return;
+        if (item.instrument && form.elements.instrument) {
+          form.elements.instrument.value = item.instrument;
+        }
+        if (form.elements.piece) {
+          form.elements.piece.value = item.name;
+        }
+        if (item.targetBpm && form.elements.bpm && !form.elements.bpm.value) {
+          form.elements.bpm.value = item.targetBpm;
+        }
+        if (item.defaultSections && item.defaultSections.length && !currentSections.length && !editingId) {
+          const bpmVal = form.elements.bpm && form.elements.bpm.value ? Number(form.elements.bpm.value) : (item.targetBpm || 80);
+          item.defaultSections.forEach(s => {
+            currentSections.push({
+              id: crypto.randomUUID(),
+              name: s.name,
+              bpm: bpmVal,
+              mistakes: 0,
+              mastery: 3,
+              note: s.note || ''
+            });
+          });
+          renderSections();
+        }
+      });
+    }
+  }
+
+  const planLibSelect = document.querySelector('#planLibrarySelect');
+  if (planLibSelect) {
+    const currentVal = planLibSelect.value;
+    planLibSelect.innerHTML = `<option value="">手动输入...</option>${library.map(item => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.name)}${item.targetBpm ? ` (目标 ${item.targetBpm} BPM)` : ''}</option>`).join('')}`;
+    planLibSelect.value = currentVal;
+    if (!planLibSelect.dataset.bound) {
+      planLibSelect.dataset.bound = '1';
+      planLibSelect.addEventListener('change', (e) => {
+        const libId = e.target.value;
+        if (!libId) return;
+        const item = LibraryManager.getById(libId);
+        if (!item) return;
+        const pieceInput = planForm.querySelector('input[name="piece"]');
+        const bpmInput = planForm.querySelector('input[name="targetBpm"]');
+        if (pieceInput) pieceInput.value = item.name;
+        if (item.targetBpm && bpmInput && !bpmInput.value) {
+          bpmInput.value = item.targetBpm;
+        }
+      });
+    }
+  }
+
+  const goalLibSelect = document.querySelector('#goalLibrarySelect');
+  if (goalLibSelect) {
+    const currentVal = goalLibSelect.value;
+    goalLibSelect.innerHTML = `<option value="">手动选择曲目...</option>${library.map(item => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.name)}${item.targetBpm ? ` (建议目标 ${item.targetBpm} BPM)` : ''}</option>`).join('')}`;
+    goalLibSelect.value = currentVal;
+    if (!goalLibSelect.dataset.bound) {
+      goalLibSelect.dataset.bound = '1';
+      goalLibSelect.addEventListener('change', (e) => {
+        const libId = e.target.value;
+        if (!libId) return;
+        const item = LibraryManager.getById(libId);
+        if (!item) return;
+        const pieceSelect = goalForm.querySelector('select[name="piece"]');
+        const bpmInput = goalForm.querySelector('input[name="targetBpm"]');
+        if (pieceSelect) {
+          let found = false;
+          for (const opt of pieceSelect.options) {
+            if (opt.value === item.name) {
+              pieceSelect.value = item.name;
+              found = true;
+              break;
+            }
+          }
+          if (!found) {
+            const newOpt = document.createElement('option');
+            newOpt.value = item.name;
+            newOpt.textContent = item.name;
+            pieceSelect.appendChild(newOpt);
+            pieceSelect.value = item.name;
+          }
+        }
+        if (item.targetBpm && bpmInput && !bpmInput.value) {
+          bpmInput.value = item.targetBpm;
+        }
+      });
+    }
+  }
   if (archiveFilter) {
     pieceFilter.value = pieces.includes(archiveFilter) ? archiveFilter : '';
   } else {
@@ -2527,6 +2926,7 @@ function render() {
   renderArchive();
   renderGoals();
   renderGoalDashboard();
+  renderLibrary();
 }
 
 function renderArchive() {
@@ -2645,6 +3045,237 @@ function renderArchive() {
       document.querySelector('#rows').scrollIntoView({ behavior: 'smooth', block: 'start' });
     });
   });
+}
+
+function addLibSection(name = '', note = '') {
+  libSections.push({
+    _id: crypto.randomUUID(),
+    name: name,
+    note: note
+  });
+  renderLibSections();
+}
+
+function removeLibSection(id) {
+  libSections = libSections.filter(s => s._id !== id);
+  renderLibSections();
+}
+
+function updateLibSection(id, field, value) {
+  const section = libSections.find(s => s._id === id);
+  if (section) {
+    section[field] = value;
+  }
+}
+
+function renderLibSections() {
+  const listEl = document.querySelector('#libSectionsList');
+  if (!listEl) return;
+  if (!libSections.length) {
+    listEl.innerHTML = '<p class="empty sectionsEmpty">暂无默认片段</p>';
+    return;
+  }
+  listEl.innerHTML = libSections.map((section) => `
+    <div class="libSectionItem" data-id="${section._id}">
+      <input type="text" placeholder="片段名称" value="${escapeHtml(section.name)}" data-lib-section-field="name" data-lib-section-id="${section._id}" />
+      <input type="text" placeholder="备注说明（可选）" value="${escapeHtml(section.note || '')}" data-lib-section-field="note" data-lib-section-id="${section._id}" />
+      <button type="button" class="secondary small" data-lib-section-del="${section._id}">删除</button>
+    </div>
+  `).join('');
+
+  listEl.querySelectorAll('[data-lib-section-field]').forEach(input => {
+    input.addEventListener('input', (e) => {
+      updateLibSection(e.target.dataset.libSectionId, e.target.dataset.libSectionField, e.target.value);
+    });
+  });
+
+  listEl.querySelectorAll('[data-lib-section-del]').forEach(btn => {
+    btn.addEventListener('click', () => removeLibSection(btn.dataset.libSectionDel));
+  });
+}
+
+function addLibLink(label = '', url = '') {
+  libLinks.push({
+    _id: crypto.randomUUID(),
+    label: label,
+    url: url
+  });
+  renderLibLinks();
+}
+
+function removeLibLink(id) {
+  libLinks = libLinks.filter(l => l._id !== id);
+  renderLibLinks();
+}
+
+function updateLibLink(id, field, value) {
+  const link = libLinks.find(l => l._id === id);
+  if (link) {
+    link[field] = value;
+  }
+}
+
+function renderLibLinks() {
+  const listEl = document.querySelector('#libLinksList');
+  if (!listEl) return;
+  if (!libLinks.length) {
+    listEl.innerHTML = '<p class="empty sectionsEmpty">暂无参考链接</p>';
+    return;
+  }
+  listEl.innerHTML = libLinks.map((link) => `
+    <div class="libLinkItem" data-id="${link._id}">
+      <input type="text" placeholder="链接标签（如：原版录音、乐谱、教程）" value="${escapeHtml(link.label)}" data-lib-link-field="label" data-lib-link-id="${link._id}" />
+      <input type="url" placeholder="URL地址" value="${escapeHtml(link.url)}" data-lib-link-field="url" data-lib-link-id="${link._id}" />
+      <button type="button" class="secondary small" data-lib-link-del="${link._id}">删除</button>
+    </div>
+  `).join('');
+
+  listEl.querySelectorAll('[data-lib-link-field]').forEach(input => {
+    input.addEventListener('input', (e) => {
+      updateLibLink(e.target.dataset.libLinkId, e.target.dataset.libLinkField, e.target.value);
+    });
+  });
+
+  listEl.querySelectorAll('[data-lib-link-del]').forEach(btn => {
+    btn.addEventListener('click', () => removeLibLink(btn.dataset.libLinkDel));
+  });
+}
+
+function resetLibraryForm() {
+  libraryForm.reset();
+  libraryForm.elements.editingId.value = '';
+  libSections = [];
+  libLinks = [];
+  renderLibSections();
+  renderLibLinks();
+  document.querySelector('#libSubmitBtn').textContent = '➕ 添加到资料库';
+  document.querySelector('#libResetBtn').hidden = true;
+}
+
+function editLibraryItem(id) {
+  const item = LibraryManager.getById(id);
+  if (!item) return;
+  libraryForm.elements.name.value = item.name || '';
+  libraryForm.elements.instrument.value = item.instrument || '';
+  libraryForm.elements.genre.value = item.genre || '';
+  libraryForm.elements.targetBpm.value = item.targetBpm || '';
+  libraryForm.elements.practiceNotes.value = item.practiceNotes || '';
+  libraryForm.elements.editingId.value = item.id;
+  libSections = (item.defaultSections || []).map(s => ({ _id: crypto.randomUUID(), name: s.name || '', note: s.note || '' }));
+  libLinks = (item.referenceLinks || []).map(l => ({ _id: crypto.randomUUID(), label: l.label || '', url: l.url || '' }));
+  renderLibSections();
+  renderLibLinks();
+  document.querySelector('#libSubmitBtn').textContent = '💾 保存修改';
+  document.querySelector('#libResetBtn').hidden = false;
+  libraryForm.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function renderLibrary() {
+  refreshLibrary();
+  const countEl = document.querySelector('#libraryCount');
+  const listEl = document.querySelector('#libraryList');
+  countEl.textContent = `共 ${library.length} 首曲目`;
+
+  if (!library.length) {
+    listEl.innerHTML = '<p class="empty">暂无曲目，添加第一首到资料库</p>';
+    return;
+  }
+
+  listEl.innerHTML = library.map((item) => `
+    <article class="libraryCard" data-id="${item.id}">
+      <div class="libraryCardHead">
+        <div>
+          <h3 class="libraryCardTitle">${escapeHtml(item.name)}</h3>
+          <div class="libraryCardMeta">
+            ${item.instrument ? `<span class="libTag instrument">🎵 ${escapeHtml(item.instrument)}</span>` : ''}
+            ${item.genre ? `<span class="libTag genre">🎶 ${escapeHtml(item.genre)}</span>` : ''}
+            ${item.targetBpm ? `<span class="libTag bpm">⚡ 目标 ${item.targetBpm} BPM</span>` : ''}
+          </div>
+        </div>
+        <div class="libraryCardActions">
+          <button class="secondary small" data-lib-edit="${item.id}">编辑</button>
+          <button class="secondary small danger" data-lib-del="${item.id}">删除</button>
+        </div>
+      </div>
+      ${item.defaultSections && item.defaultSections.length ? `
+        <div class="libraryCardSection">
+          <div class="libraryCardSectionTitle">📋 默认片段 (${item.defaultSections.length})</div>
+          <div class="librarySections">
+            ${item.defaultSections.map(s => `<span class="libSectionTag">${escapeHtml(s.name)}${s.note ? ` <em>(${escapeHtml(s.note)})</em>` : ''}</span>`).join('')}
+          </div>
+        </div>
+      ` : ''}
+      ${item.referenceLinks && item.referenceLinks.length ? `
+        <div class="libraryCardSection">
+          <div class="libraryCardSectionTitle">🔗 参考链接</div>
+          <div class="libraryLinks">
+            ${item.referenceLinks.map(l => `<a href="${escapeHtml(l.url)}" target="_blank" rel="noopener">${escapeHtml(l.label || l.url)}</a>`).join('')}
+          </div>
+        </div>
+      ` : ''}
+      ${item.practiceNotes ? `
+        <div class="libraryCardSection">
+          <div class="libraryCardSectionTitle">📝 练习备注</div>
+          <div class="libraryNotes">${escapeHtml(item.practiceNotes)}</div>
+        </div>
+      ` : ''}
+    </article>
+  `).join('');
+
+  listEl.querySelectorAll('[data-lib-edit]').forEach(btn => {
+    btn.addEventListener('click', () => editLibraryItem(btn.dataset.libEdit));
+  });
+  listEl.querySelectorAll('[data-lib-del]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const item = LibraryManager.getById(btn.dataset.libDel);
+      if (!item) return;
+      const confirmed = await showConfirm('删除曲目', `确定从资料库删除「${item.name}」吗？\n已有练习记录不会被删除。`);
+      if (!confirmed) return;
+      const result = LibraryManager.remove(item.id);
+      if (result.success) {
+        render();
+      } else {
+        alert(result.error || '删除失败');
+      }
+    });
+  });
+
+  const addSectionBtn = document.querySelector('#addLibSectionBtn');
+  const addLinkBtn = document.querySelector('#addLibLinkBtn');
+  const resetBtn = document.querySelector('#libResetBtn');
+  if (addSectionBtn) addSectionBtn.onclick = () => addLibSection();
+  if (addLinkBtn) addLinkBtn.onclick = () => addLibLink();
+  if (resetBtn) resetBtn.onclick = () => resetLibraryForm();
+
+  if (!libraryForm.dataset.bound) {
+    libraryForm.dataset.bound = '1';
+    libraryForm.addEventListener('submit', (event) => {
+      event.preventDefault();
+      const data = Object.fromEntries(new FormData(libraryForm).entries());
+      const editingId = data.editingId;
+      const payload = {
+        name: data.name,
+        instrument: data.instrument,
+        genre: data.genre,
+        targetBpm: data.targetBpm,
+        defaultSections: libSections.map(s => ({ name: s.name, note: s.note })),
+        referenceLinks: libLinks.map(l => ({ label: l.label, url: l.url })),
+        practiceNotes: data.practiceNotes
+      };
+      let result;
+      if (editingId) {
+        result = LibraryManager.update(editingId, payload);
+      } else {
+        result = LibraryManager.add(payload);
+      }
+      if (result.success) {
+        resetLibraryForm();
+        render();
+      } else {
+        alert(result.error || '操作失败');
+      }
+    });
+  }
 }
 
 function renderPlan() {

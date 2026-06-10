@@ -2225,3 +2225,298 @@ td button { margin-left: 6px; background: #dff3ef; }
     grid-template-columns: 1fr 1fr;
   }
 }
+
+.pieceSelectWrap {
+  margin-bottom: 8px;
+  padding: 10px 12px;
+  background: linear-gradient(135deg, #fdf4ff 0%, #f0fdfa 100%);
+  border: 1px solid #d8b4fe;
+  border-radius: 8px;
+}
+
+.pieceSelectWrap.small {
+  padding: 8px 10px;
+  margin-bottom: 6px;
+}
+
+.pieceSelectLabel {
+  display: block;
+  font-size: 12px;
+  color: #6b21a8;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.pieceLibrarySelect {
+  width: 100%;
+  padding: 8px 12px;
+  font-size: 14px;
+  border: 1px solid #c4b5fd;
+  border-radius: 6px;
+  background: white;
+  color: #172522;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.pieceLibrarySelect.small {
+  padding: 6px 10px;
+  font-size: 13px;
+}
+
+.pieceLibrarySelect:hover {
+  border-color: #8b5cf6;
+}
+
+.pieceLibrarySelect:focus {
+  outline: none;
+  border-color: #7c3aed;
+  box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.15);
+}
+
+.libraryPanel {
+  margin-top: 18px;
+  background: linear-gradient(135deg, #fdf4ff 0%, #faf5ff 50%, #f0fdfa 100%);
+  border: 2px solid #c4b5fd;
+}
+
+.libraryForm {
+  display: grid;
+  gap: 12px;
+  margin-top: 12px;
+  padding: 16px;
+  background: white;
+  border-radius: 10px;
+  border: 1px solid #e9d5ff;
+}
+
+.librarySubSection {
+  padding: 12px;
+  background: #faf5ff;
+  border: 1px dashed #d8b4fe;
+  border-radius: 8px;
+}
+
+.librarySubHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.librarySubHead span {
+  font-weight: 600;
+  color: #6b21a8;
+  font-size: 13px;
+}
+
+.libSectionsList,
+.libLinksList {
+  display: grid;
+  gap: 8px;
+}
+
+.libSectionItem,
+.libLinkItem {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.libSectionItem input,
+.libLinkItem input {
+  padding: 8px 10px;
+  font-size: 13px;
+}
+
+.libraryFormActions {
+  display: flex;
+  gap: 10px;
+}
+
+.libraryFormActions button {
+  flex: 1;
+}
+
+.libraryList {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 14px;
+  margin-top: 16px;
+}
+
+.libraryCard {
+  background: white;
+  border: 1px solid #e9d5ff;
+  border-radius: 12px;
+  padding: 16px;
+  transition: all 0.2s ease;
+}
+
+.libraryCard:hover {
+  border-color: #a78bfa;
+  box-shadow: 0 4px 16px rgba(139, 92, 246, 0.1);
+  transform: translateY(-2px);
+}
+
+.libraryCardHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.libraryCardTitle {
+  margin: 0 0 6px 0;
+  font-size: 18px;
+  font-weight: 700;
+  color: #172522;
+}
+
+.libraryCardMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.libTag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.libTag.instrument {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.libTag.genre {
+  background: #fce7f3;
+  color: #be185d;
+}
+
+.libTag.bpm {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.libraryCardActions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.secondary.small.danger {
+  background: #fef2f2;
+  color: #dc2626;
+  border: 1px solid #fecaca;
+}
+
+.secondary.small.danger:hover {
+  background: #fee2e2;
+  border-color: #dc2626;
+}
+
+.libraryCardSection {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px dashed #e9d5ff;
+}
+
+.libraryCardSectionTitle {
+  font-size: 12px;
+  font-weight: 600;
+  color: #6b21a8;
+  margin-bottom: 8px;
+}
+
+.librarySections {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.libSectionTag {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  background: #f0fdfa;
+  color: #0f766e;
+  border: 1px solid #99f6e4;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.libSectionTag em {
+  color: #60736f;
+  font-style: normal;
+  font-weight: 400;
+  font-size: 11px;
+}
+
+.libraryLinks {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.libraryLinks a {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  background: #eff6ff;
+  color: #2563eb;
+  border: 1px solid #bfdbfe;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  text-decoration: none;
+  transition: all 0.15s ease;
+  word-break: break-all;
+}
+
+.libraryLinks a:hover {
+  background: #dbeafe;
+  border-color: #60a5fa;
+}
+
+.libraryLinks a::before {
+  content: '🔗';
+}
+
+.libraryNotes {
+  font-size: 13px;
+  color: #172522;
+  line-height: 1.6;
+  padding: 10px 12px;
+  background: #faf5ff;
+  border: 1px solid #e9d5ff;
+  border-radius: 6px;
+  white-space: pre-wrap;
+}
+
+@media (max-width: 700px) {
+  .libSectionItem,
+  .libLinkItem {
+    grid-template-columns: 1fr;
+  }
+  .libraryList {
+    grid-template-columns: 1fr;
+  }
+  .libraryCardHead {
+    flex-direction: column;
+  }
+  .libraryCardActions {
+    align-self: flex-end;
+  }
+}
