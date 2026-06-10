@@ -906,9 +906,6 @@ function renderSessionPanel() {
     if (sessionLibSelect) {
       sessionLibSelect.addEventListener('change', (e) => {
         const libId = e.target.value;
-        if (!libId) return;
-        const item = LibraryManager.getById(libId);
-        if (!item) return;
         const sessionForm = document.querySelector('#sessionForm');
         if (!sessionForm) return;
         const instrumentSelect = sessionForm.querySelector('select[name="instrument"]');
@@ -916,6 +913,13 @@ function renderSessionPanel() {
         const bpmInput = sessionForm.querySelector('input[name="targetBpm"]');
         const previewEl = document.querySelector('#sessionSectionsPreview');
         const listEl = document.querySelector('#sessionSectionsList');
+        if (!libId) {
+          if (listEl) listEl.innerHTML = '';
+          if (previewEl) previewEl.style.display = 'none';
+          return;
+        }
+        const item = LibraryManager.getById(libId);
+        if (!item) return;
         if (item.instrument && instrumentSelect) {
           let found = false;
           for (const opt of instrumentSelect.options) {
@@ -1637,6 +1641,21 @@ planForm.addEventListener('submit', (event) => {
 goalForm.addEventListener('submit', (event) => {
   event.preventDefault();
   const data = Object.fromEntries(new FormData(goalForm).entries());
+  let sections = [];
+  const libSelect = document.querySelector('#goalLibrarySelect');
+  if (libSelect && libSelect.value) {
+    const item = LibraryManager.getById(libSelect.value);
+    if (item && item.defaultSections && item.defaultSections.length) {
+      sections = item.defaultSections.map(s => ({
+        id: crypto.randomUUID(),
+        name: s.name,
+        bpm: Number(data.targetBpm) || (item.targetBpm || 80),
+        mistakes: 0,
+        mastery: 3,
+        note: s.note || ''
+      }));
+    }
+  }
   const existingGoal = goals.find(g => g.piece === data.piece && !g.achieved);
   if (existingGoal) {
     if (!confirm('该曲目已有进行中的目标，是否覆盖？')) return;
@@ -1652,7 +1671,8 @@ goalForm.addEventListener('submit', (event) => {
     weeklyMinutes: Number(data.weeklyMinutes),
     createdAt: getToday(),
     achieved: false,
-    achievedAt: null
+    achievedAt: null,
+    sections: sections
   };
   goals.push(goal);
   saveGoals(goals);
@@ -2820,13 +2840,17 @@ function render() {
       planLibSelect.dataset.bound = '1';
       planLibSelect.addEventListener('change', (e) => {
         const libId = e.target.value;
-        if (!libId) return;
-        const item = LibraryManager.getById(libId);
-        if (!item) return;
         const pieceInput = planForm.querySelector('input[name="piece"]');
         const bpmInput = planForm.querySelector('input[name="targetBpm"]');
         const previewEl = document.querySelector('#planSectionsPreview');
         const listEl = document.querySelector('#planSectionsList');
+        if (!libId) {
+          if (listEl) listEl.innerHTML = '';
+          if (previewEl) previewEl.style.display = 'none';
+          return;
+        }
+        const item = LibraryManager.getById(libId);
+        if (!item) return;
         if (pieceInput) pieceInput.value = item.name;
         if (item.targetBpm && bpmInput && !bpmInput.value) {
           bpmInput.value = item.targetBpm;
@@ -2852,11 +2876,17 @@ function render() {
       goalLibSelect.dataset.bound = '1';
       goalLibSelect.addEventListener('change', (e) => {
         const libId = e.target.value;
-        if (!libId) return;
-        const item = LibraryManager.getById(libId);
-        if (!item) return;
         const pieceSelect = goalForm.querySelector('select[name="piece"]');
         const bpmInput = goalForm.querySelector('input[name="targetBpm"]');
+        const previewEl = document.querySelector('#goalSectionsPreview');
+        const listEl = document.querySelector('#goalSectionsList');
+        if (!libId) {
+          if (listEl) listEl.innerHTML = '';
+          if (previewEl) previewEl.style.display = 'none';
+          return;
+        }
+        const item = LibraryManager.getById(libId);
+        if (!item) return;
         if (pieceSelect) {
           let found = false;
           for (const opt of pieceSelect.options) {
@@ -2877,8 +2907,6 @@ function render() {
         if (item.targetBpm && bpmInput && !bpmInput.value) {
           bpmInput.value = item.targetBpm;
         }
-        const previewEl = document.querySelector('#goalSectionsPreview');
-        const listEl = document.querySelector('#goalSectionsList');
         if (item.defaultSections && item.defaultSections.length && previewEl && listEl) {
           listEl.innerHTML = item.defaultSections.map(s => `
             <span class="libSectionTag">${escapeHtml(s.name)}${s.note ? ` <small class="muted">· ${escapeHtml(s.note)}</small>` : ''}</span>
@@ -3447,6 +3475,11 @@ function renderGoals() {
               <span>截止: <strong>${goal.targetDate}</strong></span>
               <span>每周: <strong>${goal.weeklyMinutes}min</strong></span>
             </div>
+            ${goal.sections && goal.sections.length ? `
+            <div class="taskSections">
+              ${goal.sections.map(s => `<span class="taskSectionTag">${escapeHtml(s.name)}</span>`).join('')}
+            </div>
+            ` : ''}
           </div>
           <div class="goalStatus ${statusClass}">${statusText}</div>
         </div>
