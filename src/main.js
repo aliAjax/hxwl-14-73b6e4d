@@ -813,7 +813,7 @@ function endSession() {
   goals = goals.map((goal) => {
     if (!goal.achieved && goal.piece === session.piece && session.targetBpm && session.targetBpm >= goal.targetBpm) {
       achievedGoals.push(goal.piece);
-      return { ...goal, achieved: true, achievedAt: getToday(), autoAchieved: true };
+      return { ...goal, achieved: true, achievedAt: getToday(), autoAchieved: true, manuallyUnachieved: false };
     }
     return goal;
   });
@@ -1244,7 +1244,7 @@ function getGoalAchievedAt(goal) {
 function syncGoalAchievements() {
   let changed = false;
   goals = goals.map((goal) => {
-    if (goal.achieved || getMaxBpm(goal.piece) < goal.targetBpm) return goal;
+    if (goal.achieved || goal.manuallyUnachieved || getMaxBpm(goal.piece) < goal.targetBpm) return goal;
     changed = true;
     return { ...goal, achieved: true, achievedAt: getGoalAchievedAt(goal) };
   });
@@ -1268,7 +1268,7 @@ function calculateGoalProgress(goal) {
   const timeProgress = totalDays > 0 ? Math.min(100, Math.max(0, (daysPassed / totalDays) * 100)) : 100;
   const isOverdue = !goal.achieved && today > targetDate;
   const daysRemaining = Math.ceil((targetDate - today) / (1000 * 60 * 60 * 24));
-  const isAchieved = goal.achieved || currentBpm >= goal.targetBpm;
+  const isAchieved = goal.achieved || (!goal.manuallyUnachieved && currentBpm >= goal.targetBpm);
   return {
     bpmProgress: Math.round(bpmProgress),
     weeklyProgress: Math.round(weeklyProgress),
@@ -4740,7 +4740,7 @@ function renderGoals() {
   }).join('');
   document.querySelectorAll('[data-goal-achieve]').forEach((button) => button.addEventListener('click', () => {
     const goalId = button.dataset.goalAchieve;
-    goals = goals.map((g) => g.id === goalId ? { ...g, achieved: true, achievedAt: getToday(), autoAchieved: false } : g);
+    goals = goals.map((g) => g.id === goalId ? { ...g, achieved: true, achievedAt: getToday(), autoAchieved: false, manuallyUnachieved: false } : g);
     saveGoals(goals);
     render();
   }));
@@ -4750,7 +4750,7 @@ function renderGoals() {
     if (!goal) return;
     const confirmed = await showConfirm('撤销达成', `确定要撤销「${goal.piece}」的达成状态吗？`);
     if (!confirmed) return;
-    goals = goals.map((g) => g.id === goalId ? { ...g, achieved: false, achievedAt: null, autoAchieved: false } : g);
+    goals = goals.map((g) => g.id === goalId ? { ...g, achieved: false, achievedAt: null, autoAchieved: false, manuallyUnachieved: true } : g);
     saveGoals(goals);
     render();
   }));
