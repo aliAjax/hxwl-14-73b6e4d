@@ -1180,6 +1180,7 @@ let records = vmInitResult.records;
 let editingId = null;
 let archiveFilter = '';
 let currentSections = [];
+let currentFormPlanTaskId = null;
 
 const defaultFilters = {
   instrument: '',
@@ -1208,7 +1209,8 @@ let session = JSON.parse(localStorage.getItem(sessionKey) || 'null') || {
   targetBpm: '',
   note: '',
   sections: [],
-  createdAt: null
+  createdAt: null,
+  planTaskId: null
 };
 let committedSessionIds = JSON.parse(localStorage.getItem(committedSessionsKey) || '[]');
 let sessionTimer = null;
@@ -1429,11 +1431,64 @@ function startSession() {
     targetBpm: data.targetBpm ? Number(data.targetBpm) : null,
     note: data.note ? data.note.trim() : '',
     sections: sections,
-    createdAt: Date.now()
+    createdAt: Date.now(),
+    planTaskId: null
   };
   saveSession();
   startSessionTimer();
   renderSessionPanel();
+}
+
+function startSessionFromPlan(taskId) {
+  if (session.status !== 'idle') {
+    alert('已有进行中的练习会话，请先结束或取消当前会话');
+    return;
+  }
+  const task = planTasks.find(t => t.id === taskId);
+  if (!task) return;
+  if (task.completed) {
+    alert('该计划任务已完成，无需再次练习');
+    return;
+  }
+  const pieceInfo = LibraryManager.resolvePieceInfo(task.piece);
+  let sections = [];
+  if (task.sections && task.sections.length) {
+    sections = task.sections.map(s => ({
+      id: crypto.randomUUID(),
+      name: s.name,
+      bpm: Number(task.targetBpm),
+      mistakes: 0,
+      mastery: 3,
+      note: s.note || ''
+    }));
+  } else if (pieceInfo.defaultSections && pieceInfo.defaultSections.length) {
+    sections = pieceInfo.defaultSections.map(s => ({
+      id: crypto.randomUUID(),
+      name: s.name,
+      bpm: Number(task.targetBpm),
+      mistakes: 0,
+      mastery: 3,
+      note: s.note || ''
+    }));
+  }
+  session = {
+    id: crypto.randomUUID(),
+    status: 'running',
+    startTime: Date.now(),
+    accumulatedMs: 0,
+    instrument: pieceInfo.instrument || '',
+    piece: task.piece,
+    targetBpm: Number(task.targetBpm),
+    note: `来自今日计划 · 预计 ${task.estimatedMinutes} 分钟`,
+    sections: sections,
+    createdAt: Date.now(),
+    planTaskId: task.id
+  };
+  saveSession();
+  startSessionTimer();
+  renderSessionPanel();
+  const sessionPanel = document.querySelector('#sessionPanel');
+  if (sessionPanel) sessionPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 function pauseSession() {
@@ -1510,6 +1565,19 @@ function endSession() {
     }, 100);
   }
 
+  if (session.planTaskId && !hasDuplicateRecord) {
+    const linkedTask = planTasks.find(t => t.id === session.planTaskId);
+    if (linkedTask && !linkedTask.completed) {
+      planTasks = planTasks.map(t =>
+        t.id === session.planTaskId ? { ...t, completed: true, completedBySession: session.id } : t
+      );
+      savePlan(planTasks);
+      setTimeout(() => {
+        alert(`✅ 今日计划「${linkedTask.piece}」已自动标记为完成！`);
+      }, 200);
+    }
+  }
+
   session = {
     id: null,
     status: 'idle',
@@ -1520,7 +1588,8 @@ function endSession() {
     targetBpm: '',
     note: '',
     sections: [],
-    createdAt: null
+    createdAt: null,
+    planTaskId: null
   };
   saveSession();
   stopSessionTimer();
@@ -1542,7 +1611,8 @@ function cancelSession() {
     targetBpm: '',
     note: '',
     sections: [],
-    createdAt: null
+    createdAt: null,
+    planTaskId: null
   };
   saveSession();
   stopSessionTimer();
@@ -1696,6 +1766,12 @@ function renderSessionPanel() {
           <div class="sessionInfoRow">
             <span class="sessionLabel">练习片段</span>
             <strong>${session.sections.length} 段</strong>
+          </div>
+          ` : ''}
+          ${session.planTaskId ? `
+          <div class="sessionInfoRow">
+            <span class="sessionLabel">关联计划</span>
+            <strong class="planLinkedTag">📋 ${escapeHtml(planTasks.find(t => t.id === session.planTaskId)?.piece || '已关联')}</strong>
           </div>
           ` : ''}
         </div>
@@ -2470,6 +2546,7 @@ form.addEventListener('submit', (event) => {
   };
   if (!editingId && isDuplicate(item, records)) {
     alert('已存在相同练习记录，请勿重复提交');
+    currentFormPlanTaskId = null;
     return;
   }
   const updatedRecords = editingId
@@ -2481,8 +2558,21 @@ form.addEventListener('submit', (event) => {
     : { count: 1, names: [`${item.instrument} - ${item.piece} (${item.date})`], ids: [item.id] };
   const vmResult = VersionManager.recordChange(action, updatedRecords, details);
   records = vmResult.records;
+  if (currentFormPlanTaskId && !editingId) {
+    const linkedTask = planTasks.find(t => t.id === currentFormPlanTaskId);
+    if (linkedTask && !linkedTask.completed) {
+      planTasks = planTasks.map(t =>
+        t.id === currentFormPlanTaskId ? { ...t, completed: true, completedByRecord: item.id } : t
+      );
+      savePlan(planTasks);
+      setTimeout(() => {
+        alert(`✅ 今日计划「${linkedTask.piece}」已自动标记为完成！`);
+      }, 100);
+    }
+  }
   editingId = null;
   currentSections = [];
+  currentFormPlanTaskId = null;
   form.reset();
   render();
 });
@@ -5671,6 +5761,7 @@ function createRecordFromPlan(task) {
   
   editingId = null;
   currentSections = [];
+  currentFormPlanTaskId = task.id;
   
   if (form.elements.instrument) {
     form.elements.instrument.value = pieceInfo.instrument || '';
@@ -5862,7 +5953,10 @@ function renderPlan() {
         </div>
         ` : ''}
       </div>
-      <button class="taskDel" data-plan-del="${task.id}" aria-label="删除">×</button>
+      <div class="taskActions">
+        ${!task.completed ? `<button class="primary small startSessionFromPlanBtn" data-plan-start-session="${task.id}" title="启动计时练习会话">▶ 计时练习</button>` : ''}
+        <button class="taskDel" data-plan-del="${task.id}" aria-label="删除">×</button>
+      </div>
     </div>
   `).join('');
   document.querySelectorAll('[data-toggle]').forEach((checkbox) => checkbox.addEventListener('change', () => {
@@ -5884,6 +5978,10 @@ function renderPlan() {
     planTasks = planTasks.filter((task) => task.id !== button.dataset.planDel);
     savePlan(planTasks);
     render();
+  }));
+  document.querySelectorAll('[data-plan-start-session]').forEach((button) => button.addEventListener('click', (e) => {
+    e.stopPropagation();
+    startSessionFromPlan(button.dataset.planStartSession);
   }));
 }
 

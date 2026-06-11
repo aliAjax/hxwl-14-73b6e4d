@@ -605,6 +605,21 @@ td button { margin-left: 6px; background: #dff3ef; }
 .taskContent.clickable:hover .taskRecordHint {
   opacity: 1;
 }
+.taskActions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.startSessionFromPlanBtn {
+  font-size: 12px;
+  padding: 3px 10px;
+  white-space: nowrap;
+}
+.planLinkedTag {
+  color: #0f766e;
+  font-size: 13px;
+}
 .emptyHint {
   text-align: center;
   color: #0f766e;
