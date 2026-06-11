@@ -2169,6 +2169,11 @@ function renderImportPreview(result) {
 function processFullBackupData(parsedData) {
   const result = {
     type: 'full-backup',
+    hasRecords: false,
+    hasLibrary: false,
+    hasGoals: false,
+    hasViews: false,
+    hasPlan: false,
     records: null,
     library: { items: [], newItems: [], existingItems: [] },
     goals: { items: [], newItems: [], existingItems: [] },
@@ -2176,13 +2181,15 @@ function processFullBackupData(parsedData) {
     plan: { dates: {}, totalTasks: 0, newTasks: 0, existingTasks: 0 }
   };
 
-  if (parsedData.records && Array.isArray(parsedData.records)) {
+  if (parsedData.records !== undefined && Array.isArray(parsedData.records)) {
+    result.hasRecords = true;
     result.records = processImportData(parsedData.records);
   } else {
     result.records = { validRecords: [], newRecords: [], duplicateRecords: [], invalidRecords: [], allErrors: [] };
   }
 
-  if (parsedData.library && Array.isArray(parsedData.library)) {
+  if (parsedData.library !== undefined && Array.isArray(parsedData.library)) {
+    result.hasLibrary = true;
     result.library.items = parsedData.library;
     const existingNames = new Set(library.map(item => item.name));
     parsedData.library.forEach(item => {
@@ -2194,7 +2201,8 @@ function processFullBackupData(parsedData) {
     });
   }
 
-  if (parsedData.goals && Array.isArray(parsedData.goals)) {
+  if (parsedData.goals !== undefined && Array.isArray(parsedData.goals)) {
+    result.hasGoals = true;
     result.goals.items = parsedData.goals;
     const existingKeys = new Set(goals.map(g => `${g.piece}-${g.targetBpm}`));
     parsedData.goals.forEach(goal => {
@@ -2207,7 +2215,8 @@ function processFullBackupData(parsedData) {
     });
   }
 
-  if (parsedData.views && Array.isArray(parsedData.views)) {
+  if (parsedData.views !== undefined && Array.isArray(parsedData.views)) {
+    result.hasViews = true;
     result.views.items = parsedData.views;
     const existingNames = new Set(views.map(v => v.name));
     parsedData.views.forEach(view => {
@@ -2219,7 +2228,8 @@ function processFullBackupData(parsedData) {
     });
   }
 
-  if (parsedData.plan && typeof parsedData.plan === 'object') {
+  if (parsedData.plan !== undefined && typeof parsedData.plan === 'object' && parsedData.plan !== null) {
+    result.hasPlan = true;
     result.plan.dates = parsedData.plan;
     const existingPlanData = JSON.parse(localStorage.getItem(planKey) || 'null') || {};
     for (const date in parsedData.plan) {
@@ -2353,10 +2363,17 @@ function updateImportConfirmState() {
   const mode = getSelectedImportMode();
 
   if (pendingImportType === 'full-backup') {
-    const { records, library, goals, views, plan } = pendingImportData;
-    const hasData = mode === 'overwrite'
-      ? (records.validRecords.length > 0 || library.items.length > 0 || goals.items.length > 0 || views.items.length > 0 || Object.keys(plan.dates).length > 0)
-      : (records.newRecords.length > 0 || library.newItems.length > 0 || goals.newItems.length > 0 || views.newItems.length > 0 || plan.newTasks > 0);
+    const { hasRecords, hasLibrary, hasGoals, hasViews, hasPlan } = pendingImportData;
+    const hasAny = hasRecords || hasLibrary || hasGoals || hasViews || hasPlan;
+    const hasNewData = (
+      pendingImportData.records.newRecords.length > 0 ||
+      pendingImportData.library.newItems.length > 0 ||
+      pendingImportData.goals.newItems.length > 0 ||
+      pendingImportData.views.newItems.length > 0 ||
+      pendingImportData.plan.newTasks > 0
+    );
+
+    const hasData = mode === 'overwrite' ? hasAny : hasNewData;
 
     modalConfirm.disabled = !hasData;
     if (!hasData) {
@@ -2505,7 +2522,10 @@ modalConfirm.addEventListener('click', async () => {
 });
 
 async function handleFullBackupImport(mode) {
-  const { records: recordData, library: libData, goals: goalsData, views: viewsData, plan: planData } = pendingImportData;
+  const {
+    hasRecords, hasLibrary, hasGoals, hasViews, hasPlan,
+    records: recordData, library: libData, goals: goalsData, views: viewsData, plan: planData
+  } = pendingImportData;
 
   const newRecordCount = recordData.newRecords.length;
   const validRecordCount = recordData.validRecords.length;
@@ -2516,48 +2536,61 @@ async function handleFullBackupImport(mode) {
   const viewCount = mode === 'overwrite' ? viewsData.items.length : viewsData.newItems.length;
   const planTaskCount = mode === 'overwrite' ? planData.totalTasks : planData.newTasks;
 
-  if (recordCount === 0 && libCount === 0 && goalCount === 0 && viewCount === 0 && planTaskCount === 0) {
+  const hasAnyData = hasRecords || hasLibrary || hasGoals || hasViews || hasPlan;
+  if (!hasAnyData) {
     return;
   }
 
   if (mode === 'overwrite') {
-    const confirmed = await showConfirm(
-      '覆盖导入确认',
-      `确定要用导入的数据覆盖所有现有数据吗？\n\n将覆盖：\n- ${validRecordCount} 条练习记录\n- ${libData.items.length} 条曲目资料\n- ${goalsData.items.length} 个练习目标\n- ${viewsData.items.length} 个筛选视图\n- ${Object.keys(planData.dates).length} 天的计划任务\n\n此操作可通过历史版本回滚。`
-    );
+    let confirmMsg = '确定要用导入的数据覆盖现有数据吗？\n\n将覆盖：\n';
+    if (hasRecords) confirmMsg += `- ${validRecordCount} 条练习记录\n`;
+    else confirmMsg += '- （无记录数据，不覆盖记录）\n';
+    if (hasLibrary) confirmMsg += `- ${libData.items.length} 条曲目资料\n`;
+    else confirmMsg += '- （无资料库数据，不覆盖）\n';
+    if (hasGoals) confirmMsg += `- ${goalsData.items.length} 个练习目标\n`;
+    else confirmMsg += '- （无目标数据，不覆盖）\n';
+    if (hasViews) confirmMsg += `- ${viewsData.items.length} 个筛选视图\n`;
+    else confirmMsg += '- （无视图数据，不覆盖）\n';
+    if (hasPlan) confirmMsg += `- ${Object.keys(planData.dates).length} 天的计划任务\n`;
+    else confirmMsg += '- （无计划数据，不覆盖）\n';
+    confirmMsg += '\n此操作可通过历史版本回滚（仅练习记录）。';
+
+    const confirmed = await showConfirm('覆盖导入确认', confirmMsg);
     if (!confirmed) return;
   }
 
-  let finalRecords;
-  if (mode === 'overwrite') {
-    const newRecs = recordData.validRecords.map(item => item.record);
-    finalRecords = newRecs;
-  } else {
-    const newRecs = recordData.newRecords.map(item => item.record);
-    finalRecords = [...newRecs, ...records];
+  if (hasRecords) {
+    let finalRecords;
+    if (mode === 'overwrite') {
+      const newRecs = recordData.validRecords.map(item => item.record);
+      finalRecords = newRecs;
+    } else {
+      const newRecs = recordData.newRecords.map(item => item.record);
+      finalRecords = [...newRecs, ...records];
+    }
+
+    const versionResult = VersionManager.recordChange('import', finalRecords, {
+      count: recordCount,
+      mode,
+      type: 'full-backup'
+    });
+    records = versionResult.records;
   }
 
-  const versionResult = VersionManager.recordChange('import', finalRecords, {
-    count: recordCount,
-    mode,
-    type: 'full-backup'
-  });
-  records = versionResult.records;
-
   if (mode === 'overwrite') {
-    if (libData.items.length > 0) {
+    if (hasLibrary) {
       localStorage.setItem(libraryKey, JSON.stringify(libData.items));
       library = LibraryManager.getAll();
     }
-    if (goalsData.items.length > 0) {
+    if (hasGoals) {
       goals = goalsData.items;
       saveGoals(goals);
     }
-    if (viewsData.items.length > 0) {
+    if (hasViews) {
       views = viewsData.items;
       saveViews();
     }
-    if (Object.keys(planData.dates).length > 0) {
+    if (hasPlan) {
       localStorage.setItem(planKey, JSON.stringify(planData.dates));
       planTasks = loadPlan();
     }
@@ -2614,7 +2647,13 @@ async function handleFullBackupImport(mode) {
   closeImportModal();
 
   const modeText = mode === 'overwrite' ? '（覆盖模式）' : '（合并模式）';
-  alert(`成功导入完整备份${modeText}！\n\n- 练习记录: ${recordCount} 条\n- 曲目资料: ${libCount} 条\n- 练习目标: ${goalCount} 个\n- 筛选视图: ${viewCount} 个\n- 计划任务: ${planTaskCount} 条`);
+  const details = [];
+  if (hasRecords) details.push(`练习记录: ${recordCount} 条`);
+  if (hasLibrary) details.push(`曲目资料: ${libCount} 条`);
+  if (hasGoals) details.push(`练习目标: ${goalCount} 个`);
+  if (hasViews) details.push(`筛选视图: ${viewCount} 个`);
+  if (hasPlan) details.push(`计划任务: ${planTaskCount} 条`);
+  alert(`成功导入完整备份${modeText}！\n\n${details.join('\n')}`);
 }
 
 function showPrompt(title, message, placeholder = '', defaultValue = '') {
