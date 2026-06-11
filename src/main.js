@@ -114,6 +114,76 @@ const DataMigration = (() => {
     }
   }
 
+  function tryExtractPartialArray(raw) {
+    if (!raw || typeof raw !== 'string') return null;
+    const trimmed = raw.trim();
+    if (!trimmed.startsWith('[')) return null;
+
+    const items = [];
+    let depth = 0;
+    let start = -1;
+    let inString = false;
+    let escape = false;
+
+    for (let i = 0; i < trimmed.length; i++) {
+      const ch = trimmed[i];
+      if (escape) { escape = false; continue; }
+      if (ch === '\\' && inString) { escape = true; continue; }
+      if (ch === '"' && !escape) { inString = !inString; continue; }
+      if (inString) continue;
+
+      if (ch === '{' && depth === 1 && start === -1) { start = i; }
+      if (ch === '}' && depth === 1 && start !== -1) {
+        try {
+          const objStr = trimmed.slice(start, i + 1);
+          items.push(JSON.parse(objStr));
+        } catch {}
+        start = -1;
+      }
+      if (ch === '[') depth++;
+      if (ch === ']') {
+        depth--;
+        if (depth === 0) break;
+      }
+    }
+    return items.length > 0 ? items : null;
+  }
+
+  function saveCorruptedBackup(name, raw) {
+    try {
+      const corruptedKey = `hxwl-14-corrupted-${name}`;
+      localStorage.setItem(corruptedKey, raw);
+      const meta = JSON.parse(localStorage.getItem('hxwl-14-corrupted-list') || '[]');
+      const list = Array.isArray(meta) ? meta : [];
+      if (!list.includes(name)) list.push(name);
+      localStorage.setItem('hxwl-14-corrupted-list', JSON.stringify(list));
+    } catch {}
+  }
+
+  function getCorruptedList() {
+    try {
+      const raw = localStorage.getItem('hxwl-14-corrupted-list');
+      const list = JSON.parse(raw || '[]');
+      return Array.isArray(list) ? list : [];
+    } catch { return []; }
+  }
+
+  function getCorruptedRaw(name) {
+    return localStorage.getItem(`hxwl-14-corrupted-${name}`) || null;
+  }
+
+  function clearCorrupted(name) {
+    try {
+      localStorage.removeItem(`hxwl-14-corrupted-${name}`);
+      const raw = localStorage.getItem('hxwl-14-corrupted-list');
+      const list = JSON.parse(raw || '[]');
+      if (Array.isArray(list)) {
+        const filtered = list.filter(n => n !== name);
+        localStorage.setItem('hxwl-14-corrupted-list', JSON.stringify(filtered));
+      }
+    } catch {}
+  }
+
   function loadMigrationMeta() {
     const raw = localStorage.getItem(migrationMetaKey);
     const parsed = safeParse(raw, null);
@@ -177,12 +247,19 @@ const DataMigration = (() => {
 
   function detectCorruption(name, info) {
     const raw = localStorage.getItem(info.key);
-    if (raw === null || raw === '') return { status: 'missing' };
+    if (raw === null || raw === '') return { status: 'missing', raw: null };
     const parsed = safeParse(raw, null);
-    if (parsed === null) return { status: 'corrupted', raw };
-    if (info.type === 'array' && !Array.isArray(parsed)) return { status: 'type_mismatch', expected: 'array', actual: typeof parsed };
-    if (info.type === 'object' && (Array.isArray(parsed) || typeof parsed !== 'object')) return { status: 'type_mismatch', expected: 'object', actual: Array.isArray(parsed) ? 'array' : typeof parsed };
-    return { status: 'ok', parsed };
+    if (parsed === null) {
+      let partial = null;
+      if (info.type === 'array') {
+        partial = tryExtractPartialArray(raw);
+      }
+      return { status: 'corrupted', raw, partial };
+    }
+    if (info.type === 'array' && !Array.isArray(parsed)) return { status: 'type_mismatch', expected: 'array', actual: typeof parsed, parsed };
+    if (info.type === 'object' && (Array.isArray(parsed) || typeof parsed !== 'object')) return { status: 'type_mismatch', expected: 'object', actual: Array.isArray(parsed) ? 'array' : typeof parsed, parsed };
+    if (info.type === 'string' && typeof parsed !== 'string') return { status: 'type_mismatch', expected: 'string', actual: typeof parsed, parsed };
+    return { status: 'ok', parsed, raw };
   }
 
   function repairRecords(parsed) {
@@ -372,6 +449,23 @@ const DataMigration = (() => {
     return { data, repairs };
   }
 
+  function runCrossTypeValidation() {
+    const repairs = [];
+    try {
+      const viewsRaw = localStorage.getItem(viewsKey);
+      const currentViewRaw = localStorage.getItem(currentViewKey);
+      const views = safeParse(viewsRaw, null);
+      if (Array.isArray(views) && currentViewRaw && currentViewRaw !== '') {
+        const viewExists = views.some(v => v && v.id === currentViewRaw);
+        if (!viewExists) {
+          localStorage.setItem(currentViewKey, '');
+          repairs.push('当前视图ID指向不存在的视图，已清空');
+        }
+      }
+    } catch {}
+    return repairs;
+  }
+
   function migrate() {
     const meta = loadMigrationMeta();
     const report = {
@@ -380,7 +474,8 @@ const DataMigration = (() => {
       hadCorruption: false,
       details: [],
       errors: [],
-      snapshotId: null
+      snapshotId: null,
+      corruptedBackedUp: []
     };
 
     const needsMigration = meta.schemaVersion < GLOBAL_SCHEMA_VERSION;
@@ -410,7 +505,16 @@ const DataMigration = (() => {
           continue;
         }
         if (detection.status === 'corrupted') {
-          detail.repairs.push('JSON损坏无法解析，将初始化默认值');
+          if (detection.raw) {
+            saveCorruptedBackup(name, detection.raw);
+            report.corruptedBackedUp.push(name);
+            detail.repairs.push('原始损坏数据已备份');
+          }
+          if (detection.partial && Array.isArray(detection.partial) && detection.partial.length > 0) {
+            detail.repairs.push(`JSON部分损坏，成功恢复 ${detection.partial.length} 条有效数据`);
+          } else {
+            detail.repairs.push('JSON损坏无法解析，将初始化默认值');
+          }
           anyRepair = true;
           report.details.push(detail);
           continue;
@@ -438,9 +542,9 @@ const DataMigration = (() => {
       try {
         for (const [name, info] of Object.entries(DATA_TYPES)) {
           const dataVersion = meta.dataVersions?.[name] || 0;
-          const raw = localStorage.getItem(info.key);
+          const detection = detectCorruption(name, info);
 
-          if (raw === null || raw === '') {
+          if (detection.status === 'missing') {
             const result = runMigrationChain(name, null, 0);
             if (result.data !== null && result.data !== undefined) {
               localStorage.setItem(info.key, JSON.stringify(result.data));
@@ -454,9 +558,35 @@ const DataMigration = (() => {
             continue;
           }
 
-          const parsed = safeParse(raw, null);
-          if (parsed !== null) {
-            const result = runMigrationChain(name, parsed, dataVersion);
+          if (detection.status === 'corrupted') {
+            let sourceData = detection.partial || null;
+            const result = runMigrationChain(name, sourceData, 0);
+            if (result.data !== null && result.data !== undefined) {
+              localStorage.setItem(info.key, JSON.stringify(result.data));
+              const existing = report.details.find(d => d.type === name);
+              if (existing) {
+                existing.repairs.push(...result.repairs);
+              } else if (result.repairs.length > 0) {
+                report.details.push({ type: name, label: info.label, status: 'repaired', repairs: result.repairs });
+              }
+            }
+            continue;
+          }
+
+          if (detection.status === 'type_mismatch') {
+            const result = runMigrationChain(name, detection.parsed, 0);
+            localStorage.setItem(info.key, JSON.stringify(result.data));
+            const existing = report.details.find(d => d.type === name);
+            if (existing) {
+              existing.repairs.push(...result.repairs);
+            } else if (result.repairs.length > 0) {
+              report.details.push({ type: name, label: info.label, status: 'repaired', repairs: result.repairs });
+            }
+            continue;
+          }
+
+          if (detection.status === 'ok') {
+            const result = runMigrationChain(name, detection.parsed, dataVersion);
             if (result.repairs.length > 0) {
               anyRepair = true;
               const existing = report.details.find(d => d.type === name);
@@ -468,6 +598,17 @@ const DataMigration = (() => {
             }
             localStorage.setItem(info.key, JSON.stringify(result.data));
           }
+        }
+
+        const crossRepairs = runCrossTypeValidation();
+        if (crossRepairs.length > 0) {
+          anyRepair = true;
+          report.details.push({
+            type: 'cross-validation',
+            label: '跨数据一致性检查',
+            status: 'repaired',
+            repairs: crossRepairs
+          });
         }
 
         const newMeta = {
@@ -511,6 +652,68 @@ const DataMigration = (() => {
     return GLOBAL_SCHEMA_VERSION;
   }
 
+  function migrateBackupData(backup) {
+    const result = {
+      data: {},
+      repairs: [],
+      migrated: false,
+      errors: []
+    };
+
+    const backupVersion = backup.version ? Number(String(backup.version).replace(/[^0-9.]/g, '')) : 1;
+    const schemaVersion = backup.schemaVersion || (backupVersion >= 2 ? 2 : 0);
+
+    const fields = {
+      records: 'records',
+      library: 'library',
+      plan: 'plan',
+      goals: 'goals',
+      views: 'views',
+      filters: 'filters'
+    };
+
+    for (const [name, field] of Object.entries(fields)) {
+      if (backup[field] === undefined) continue;
+      const raw = backup[field];
+      try {
+        const info = DATA_TYPES[name];
+        if (!info) continue;
+
+        let parsed;
+        if (typeof raw === 'string') {
+          parsed = safeParse(raw, null);
+          if (parsed === null) {
+            const partial = info.type === 'array' ? tryExtractPartialArray(raw) : null;
+            if (partial && partial.length > 0) {
+              parsed = partial;
+              result.repairs.push(`${info.label}：JSON部分损坏，恢复了 ${partial.length} 条数据`);
+            } else {
+              result.repairs.push(`${info.label}：数据损坏，已跳过`);
+              continue;
+            }
+          }
+        } else {
+          parsed = raw;
+        }
+
+        const migrationResult = runMigrationChain(name, parsed, schemaVersion);
+        result.data[name] = migrationResult.data;
+        if (migrationResult.repairs.length > 0) {
+          result.repairs.push(...migrationResult.repairs.map(r => `${info.label}：${r}`));
+          result.migrated = true;
+        }
+      } catch (e) {
+        result.errors.push(`${name}: ${e.message}`);
+      }
+    }
+
+    if (result.data.views && result.data.views.length > 0) {
+      result.repairs = result.repairs.filter(r => !r.includes('当前视图'));
+    }
+
+    return result;
+  }
+
   return {
     migrate,
     getSnapshots,
@@ -518,6 +721,10 @@ const DataMigration = (() => {
     getLatestSnapshotId,
     getGlobalSchemaVersion,
     loadMigrationMeta,
+    migrateBackupData,
+    getCorruptedList,
+    getCorruptedRaw,
+    clearCorrupted,
     DATA_TYPES
   };
 })();
@@ -2699,6 +2906,16 @@ function getViewConflictKey(view) {
 }
 
 function processFullBackupData(parsedData) {
+  const migrationResult = DataMigration.migrateBackupData(parsedData);
+  const migrated = migrationResult.data;
+  const backupData = { ...parsedData };
+  if (migrated.records !== undefined) backupData.records = migrated.records;
+  if (migrated.library !== undefined) backupData.library = migrated.library;
+  if (migrated.plan !== undefined) backupData.plan = migrated.plan;
+  if (migrated.goals !== undefined) backupData.goals = migrated.goals;
+  if (migrated.views !== undefined) backupData.views = migrated.views;
+  if (migrated.filters !== undefined) backupData.filters = migrated.filters;
+
   const result = {
     type: 'full-backup',
     hasRecords: false,
@@ -2706,6 +2923,9 @@ function processFullBackupData(parsedData) {
     hasGoals: false,
     hasViews: false,
     hasPlan: false,
+    migrationRepairs: migrationResult.repairs,
+    migrationErrors: migrationResult.errors,
+    backupVersion: parsedData.version || '1.0',
     records: {
       validRecords: [],
       newRecords: [],
@@ -2720,10 +2940,10 @@ function processFullBackupData(parsedData) {
     plan: { dates: {}, totalTasks: 0, newTasks: 0, existingTasks: 0 }
   };
 
-  if (parsedData.records !== undefined && Array.isArray(parsedData.records)) {
+  if (backupData.records !== undefined && Array.isArray(backupData.records)) {
     result.hasRecords = true;
-    if (parsedData.records.length > 0) {
-      const processed = processImportData(parsedData.records);
+    if (backupData.records.length > 0) {
+      const processed = processImportData(backupData.records);
       result.records.validRecords = processed.validRecords;
       result.records.newRecords = processed.newRecords;
       result.records.duplicateRecords = processed.duplicateRecords;
@@ -2757,13 +2977,13 @@ function processFullBackupData(parsedData) {
     result.records = { validRecords: [], newRecords: [], duplicateRecords: [], invalidRecords: [], allErrors: [], conflicts: [] };
   }
 
-  if (parsedData.library !== undefined && Array.isArray(parsedData.library)) {
+  if (backupData.library !== undefined && Array.isArray(backupData.library)) {
     result.hasLibrary = true;
-    result.library.items = parsedData.library;
+    result.library.items = backupData.library;
     const existingByName = new Map();
     library.forEach(item => existingByName.set(item.name, item));
 
-    parsedData.library.forEach(item => {
+    backupData.library.forEach(item => {
       const key = getLibraryConflictKey(item);
       if (existingByName.has(key)) {
         result.library.existingItems.push(item);
@@ -2778,11 +2998,11 @@ function processFullBackupData(parsedData) {
     });
   }
 
-  if (parsedData.goals !== undefined && Array.isArray(parsedData.goals)) {
+  if (backupData.goals !== undefined && Array.isArray(backupData.goals)) {
     result.hasGoals = true;
-    result.goals.items = parsedData.goals;
+    result.goals.items = backupData.goals;
     const existingKeys = new Set(goals.map(g => `${g.piece}-${g.targetBpm}`));
-    parsedData.goals.forEach(goal => {
+    backupData.goals.forEach(goal => {
       const key = `${goal.piece}-${goal.targetBpm}`;
       if (existingKeys.has(key)) {
         result.goals.existingItems.push(goal);
@@ -2792,13 +3012,13 @@ function processFullBackupData(parsedData) {
     });
   }
 
-  if (parsedData.views !== undefined && Array.isArray(parsedData.views)) {
+  if (backupData.views !== undefined && Array.isArray(backupData.views)) {
     result.hasViews = true;
-    result.views.items = parsedData.views;
+    result.views.items = backupData.views;
     const existingByName = new Map();
     views.forEach(v => existingByName.set(v.name, v));
 
-    parsedData.views.forEach(view => {
+    backupData.views.forEach(view => {
       const key = getViewConflictKey(view);
       if (existingByName.has(key)) {
         result.views.existingItems.push(view);
@@ -2813,12 +3033,12 @@ function processFullBackupData(parsedData) {
     });
   }
 
-  if (parsedData.plan !== undefined && typeof parsedData.plan === 'object' && parsedData.plan !== null) {
+  if (backupData.plan !== undefined && typeof backupData.plan === 'object' && backupData.plan !== null) {
     result.hasPlan = true;
-    result.plan.dates = parsedData.plan;
+    result.plan.dates = backupData.plan;
     const existingPlanData = JSON.parse(localStorage.getItem(planKey) || 'null') || {};
-    for (const date in parsedData.plan) {
-      const tasks = parsedData.plan[date];
+    for (const date in backupData.plan) {
+      const tasks = backupData.plan[date];
       if (Array.isArray(tasks)) {
         result.plan.totalTasks += tasks.length;
         const existingTasks = existingPlanData[date] || [];
@@ -2893,7 +3113,29 @@ function renderFullBackupPreview(result) {
 
   let html = '';
 
-  html += `<span class="backupTypeBadge full">💾 完整备份</span>`;
+  html += `<span class="backupTypeBadge full">💾 完整备份 v${result.backupVersion || '1.0'}</span>`;
+
+  if (result.migrationRepairs && result.migrationRepairs.length > 0) {
+    html += `
+      <div class="migrationImportInfo">
+        <div class="migrationImportTitle">🔄 数据格式迁移</div>
+        <ul class="migrationImportList">
+          ${result.migrationRepairs.map(r => `<li>${escapeHtml(r)}</li>`).join('')}
+        </ul>
+      </div>
+    `;
+  }
+
+  if (result.migrationErrors && result.migrationErrors.length > 0) {
+    html += `
+      <div class="migrationImportInfo migrationError">
+        <div class="migrationImportTitle">⚠️ 迁移警告</div>
+        <ul class="migrationImportList">
+          ${result.migrationErrors.map(e => `<li>${escapeHtml(e)}</li>`).join('')}
+        </ul>
+      </div>
+    `;
+  }
 
   html += `
     <div class="moduleSelectSection">
@@ -6771,6 +7013,11 @@ function showMigrationToast(report) {
 
   if (report.snapshotId) {
     parts.push(`<div class="migrationToastSnapshot">恢复快照已保存 (ID: ${report.snapshotId.slice(0, 8)}...)</div>`);
+  }
+
+  if (report.corruptedBackedUp && report.corruptedBackedUp.length > 0) {
+    const names = report.corruptedBackedUp.map(n => DataMigration.DATA_TYPES[n]?.label || n).join('、');
+    parts.push(`<div class="migrationToastCorrupted">💾 损坏数据已备份: ${names}（可手动恢复）</div>`);
   }
 
   toast.innerHTML = parts.join('');
