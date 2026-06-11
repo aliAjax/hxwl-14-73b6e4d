@@ -248,6 +248,16 @@ const DataMigration = (() => {
   function detectCorruption(name, info) {
     const raw = localStorage.getItem(info.key);
     if (raw === null || raw === '') return { status: 'missing', raw: null };
+    if (name === 'currentView') {
+      const parsed = safeParse(raw, null);
+      if (typeof parsed === 'string') {
+        return { status: 'ok', parsed, raw, storage: 'json-string' };
+      }
+      if (parsed !== null) {
+        return { status: 'type_mismatch', expected: 'string', actual: Array.isArray(parsed) ? 'array' : typeof parsed, parsed };
+      }
+      return { status: 'ok', parsed: raw, raw, storage: 'raw-string' };
+    }
     const parsed = safeParse(raw, null);
     if (parsed === null) {
       let partial = null;
@@ -260,6 +270,14 @@ const DataMigration = (() => {
     if (info.type === 'object' && (Array.isArray(parsed) || typeof parsed !== 'object')) return { status: 'type_mismatch', expected: 'object', actual: Array.isArray(parsed) ? 'array' : typeof parsed, parsed };
     if (info.type === 'string' && typeof parsed !== 'string') return { status: 'type_mismatch', expected: 'string', actual: typeof parsed, parsed };
     return { status: 'ok', parsed, raw };
+  }
+
+  function saveMigratedValue(name, info, value) {
+    if (name === 'currentView') {
+      localStorage.setItem(info.key, typeof value === 'string' ? value : '');
+      return;
+    }
+    localStorage.setItem(info.key, JSON.stringify(value));
   }
 
   function repairRecords(parsed) {
@@ -547,7 +565,7 @@ const DataMigration = (() => {
           if (detection.status === 'missing') {
             const result = runMigrationChain(name, null, 0);
             if (result.data !== null && result.data !== undefined) {
-              localStorage.setItem(info.key, JSON.stringify(result.data));
+              saveMigratedValue(name, info, result.data);
               const existing = report.details.find(d => d.type === name);
               if (existing) {
                 existing.repairs.push(...result.repairs);
@@ -562,7 +580,7 @@ const DataMigration = (() => {
             let sourceData = detection.partial || null;
             const result = runMigrationChain(name, sourceData, 0);
             if (result.data !== null && result.data !== undefined) {
-              localStorage.setItem(info.key, JSON.stringify(result.data));
+              saveMigratedValue(name, info, result.data);
               const existing = report.details.find(d => d.type === name);
               if (existing) {
                 existing.repairs.push(...result.repairs);
@@ -575,7 +593,7 @@ const DataMigration = (() => {
 
           if (detection.status === 'type_mismatch') {
             const result = runMigrationChain(name, detection.parsed, 0);
-            localStorage.setItem(info.key, JSON.stringify(result.data));
+            saveMigratedValue(name, info, result.data);
             const existing = report.details.find(d => d.type === name);
             if (existing) {
               existing.repairs.push(...result.repairs);
@@ -596,7 +614,17 @@ const DataMigration = (() => {
                 report.details.push({ type: name, label: info.label, status: 'repaired', repairs: result.repairs });
               }
             }
-            localStorage.setItem(info.key, JSON.stringify(result.data));
+            saveMigratedValue(name, info, result.data);
+            if (name === 'currentView' && detection.storage === 'json-string') {
+              anyRepair = true;
+              const existing = report.details.find(d => d.type === name);
+              const repairText = '当前视图ID已从JSON字符串归一为旧版兼容的裸字符串';
+              if (existing) {
+                existing.repairs.push(repairText);
+              } else {
+                report.details.push({ type: name, label: info.label, status: 'repaired', repairs: [repairText] });
+              }
+            }
           }
         }
 
