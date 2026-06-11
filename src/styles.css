@@ -4445,6 +4445,163 @@ td button { margin-left: 6px; background: #dff3ef; }
   font-weight: 600;
 }
 
+.batchDialog .conflictDialogContent {
+  max-width: 620px;
+}
+
+.batchConflictList {
+  margin: 0 24px 16px;
+  padding: 14px 16px;
+  background: linear-gradient(135deg, #fef3c7 0%, #fffbeb 100%);
+  border: 1px solid #fcd34d;
+  border-radius: 12px;
+}
+
+.batchConflictListTitle {
+  font-size: 13px;
+  font-weight: 600;
+  color: #92400e;
+  margin-bottom: 10px;
+}
+
+.batchConflictListGrid {
+  display: grid;
+  gap: 6px;
+  max-height: 140px;
+  overflow-y: auto;
+}
+
+.batchConflictRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px;
+  background: rgba(255,255,255,0.7);
+  border-radius: 8px;
+  font-size: 12px;
+}
+
+.batchConflictPiece {
+  font-weight: 600;
+  color: #78350f;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex-shrink: 0;
+  max-width: 140px;
+}
+
+.batchConflictType {
+  color: #a16207;
+  flex-shrink: 0;
+}
+
+.batchConflictBpm {
+  margin-left: auto;
+  color: #4b5563;
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+
+.batchStrategyTitle {
+  padding: 8px 24px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.batchStrategyGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  padding: 0 24px 16px;
+}
+
+.batchStrategyItem {
+  display: block;
+  position: relative;
+  border: 2px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 12px;
+  cursor: pointer;
+  transition: all 0.18s ease;
+  background: #fafafa;
+}
+
+.batchStrategyItem:hover:not(.disabled) {
+  border-color: #6ee7b7;
+  background: #ecfdf5;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.12);
+}
+
+.batchStrategyItem.selected {
+  border-color: #10b981;
+  background: linear-gradient(135deg, #d1fae5 0%, #ecfdf5 100%);
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.15);
+}
+
+.batchStrategyItem.disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  background: #f9fafb;
+}
+
+.batchStrategyItem input[type="radio"] {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  accent-color: #10b981;
+  width: 16px;
+  height: 16px;
+}
+
+.batchStrategyHead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.batchStrategyIcon {
+  font-size: 20px;
+}
+
+.batchStrategyName {
+  font-size: 14px;
+  font-weight: 700;
+  color: #111827;
+}
+
+.batchStrategyDesc {
+  font-size: 11px;
+  line-height: 1.5;
+  color: #6b7280;
+  padding-right: 22px;
+}
+
+.batchDialog .conflictDialogActions {
+  padding: 12px 24px 20px;
+}
+
+@media (max-width: 600px) {
+  .batchStrategyGrid {
+    grid-template-columns: 1fr;
+  }
+  .batchConflictRow {
+    flex-wrap: wrap;
+  }
+  .batchConflictBpm {
+    margin-left: 0;
+    width: 100%;
+    padding-top: 2px;
+  }
+  .batchDialog .conflictDialogContent {
+    margin: 12px;
+  }
+}
+
 @media (max-width: 600px) {
   .conflictCompare {
     grid-template-columns: 1fr;

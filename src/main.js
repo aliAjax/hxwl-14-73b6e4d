@@ -6792,6 +6792,130 @@ const PlanGenerator = (() => {
     });
   }
 
+  async function showBatchStrategyDialog(preCheck) {
+    const { total, withConflict, withoutConflict, conflicts } = preCheck;
+
+    const conflictListHtml = conflicts.length > 0
+      ? `
+        <div class="batchConflictList">
+          <div class="batchConflictListTitle">📋 存在冲突的曲目（${conflicts.length}）</div>
+          <div class="batchConflictListGrid">
+            ${conflicts.map(c => `
+              <div class="batchConflictRow">
+                <span class="batchConflictPiece">${escapeHtml(c.piece)}</span>
+                <span class="batchConflictType">(${c.suggestionLabel})</span>
+                <span class="batchConflictBpm">BPM ${c.existingBpm} → ${c.suggestedBpm}</span>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      `
+      : '';
+
+    const html = `
+      <div class="conflictDialog batchDialog" id="batchDialog">
+        <div class="conflictDialogOverlay"></div>
+        <div class="conflictDialogContent">
+          <div class="conflictDialogHeader">
+            <h3>✨ 批量生成今日练习计划</h3>
+            <p class="conflictDialogSub">共 <strong>${total}</strong> 条可执行建议，其中 <strong>${withoutConflict.length}</strong> 条无冲突，<strong>${withConflict.length}</strong> 条存在同曲任务</p>
+          </div>
+          ${conflictListHtml}
+          <div class="batchStrategyTitle">请选择冲突处理策略：</div>
+          <div class="batchStrategyGrid">
+            <label class="batchStrategyItem" data-strategy="merge">
+              <input type="radio" name="batchStrategy" value="merge" ${withConflict.length > 0 ? 'checked' : ''} ${withConflict.length === 0 ? 'disabled' : ''}>
+              <div class="batchStrategyContent">
+                <div class="batchStrategyHead">
+                  <span class="batchStrategyIcon">🔗</span>
+                  <span class="batchStrategyName">全部合并更新</span>
+                </div>
+                <div class="batchStrategyDesc">对所有冲突任务取BPM/时长较大值，合并新的重点片段</div>
+              </div>
+            </label>
+            <label class="batchStrategyItem" data-strategy="skip">
+              <input type="radio" name="batchStrategy" value="skip" ${withConflict.length === 0 ? 'disabled' : ''}>
+              <div class="batchStrategyContent">
+                <div class="batchStrategyHead">
+                  <span class="batchStrategyIcon">⏭️</span>
+                  <span class="batchStrategyName">全部跳过冲突</span>
+                </div>
+                <div class="batchStrategyDesc">仅添加无冲突的新任务，保留已有计划不变</div>
+              </div>
+            </label>
+            <label class="batchStrategyItem" data-strategy="duplicate">
+              <input type="radio" name="batchStrategy" value="duplicate" ${withConflict.length === 0 ? 'disabled' : ''}>
+              <div class="batchStrategyContent">
+                <div class="batchStrategyHead">
+                  <span class="batchStrategyIcon">📋</span>
+                  <span class="batchStrategyName">全部新增副本</span>
+                </div>
+                <div class="batchStrategyDesc">为每个建议创建独立任务，允许今日计划出现同名多任务</div>
+              </div>
+            </label>
+            <label class="batchStrategyItem" data-strategy="ask">
+              <input type="radio" name="batchStrategy" value="ask" ${withConflict.length === 0 ? 'disabled' : ''}>
+              <div class="batchStrategyContent">
+                <div class="batchStrategyHead">
+                  <span class="batchStrategyIcon">👆</span>
+                  <span class="batchStrategyName">逐条手动选择</span>
+                </div>
+                <div class="batchStrategyDesc">为每个冲突依次弹出对话框，由您分别决定合并/跳过/副本</div>
+              </div>
+            </label>
+          </div>
+          <div class="conflictDialogActions">
+            <button class="primary" id="batchConfirmBtn" ${withConflict.length === 0 ? '' : ''}>确认并生成（${withoutConflict.length} 新建 ${withConflict.length > 0 ? '+' + withConflict.length + ' 处理' : ''}）</button>
+            <button class="secondary" id="batchCancelBtn">取消</button>
+          </div>
+        </div>
+      </div>
+    `;
+
+    document.body.insertAdjacentHTML('beforeend', html);
+    const dialog = document.querySelector('#batchDialog');
+
+    dialog.querySelectorAll('.batchStrategyItem input').forEach(input => {
+      if (input.disabled) {
+        input.closest('.batchStrategyItem').classList.add('disabled');
+      }
+    });
+
+    dialog.querySelectorAll('.batchStrategyItem').forEach(item => {
+      item.onclick = (e) => {
+        const input = item.querySelector('input');
+        if (input.disabled) return;
+        if (e.target.tagName !== 'INPUT') {
+          input.checked = true;
+        }
+        dialog.querySelectorAll('.batchStrategyItem').forEach(i => i.classList.remove('selected'));
+        item.classList.add('selected');
+      };
+    });
+
+    const selectedDefault = dialog.querySelector('.batchStrategyItem input:checked');
+    if (selectedDefault) selectedDefault.closest('.batchStrategyItem')?.classList.add('selected');
+
+    return new Promise((resolve) => {
+      const removeDialog = () => dialog.remove();
+
+      dialog.querySelector('#batchConfirmBtn').onclick = () => {
+        const selected = dialog.querySelector('input[name="batchStrategy"]:checked');
+        const strategy = selected ? selected.value : 'merge';
+        removeDialog();
+        resolve(strategy);
+      };
+      dialog.querySelector('#batchCancelBtn').onclick = () => {
+        removeDialog();
+        resolve(null);
+      };
+      dialog.querySelector('.conflictDialogOverlay').onclick = () => {
+        removeDialog();
+        resolve(null);
+      };
+    });
+  }
+
   async function handleSuggestionToPlan(suggestion) {
     const existingTasks = findTodayPlanTaskByPiece(suggestion.piece);
 
@@ -6837,6 +6961,13 @@ const PlanGenerator = (() => {
   }
 
   async function batchGenerateAllPlans() {
+    const typeLabels = {
+      speedup: '提速',
+      slowdown: '降速巩固',
+      catchup: '长期未练复习',
+      spike: '错误异常修正'
+    };
+
     const result = SuggestionEngine.generateSuggestions();
     const suggestions = result.suggestions.filter(s => s.planInfo);
 
@@ -6845,24 +6976,85 @@ const PlanGenerator = (() => {
       return;
     }
 
+    const withoutConflict = [];
+    const withConflict = [];
+    const conflicts = [];
+
+    for (const suggestion of suggestions) {
+      const existingTasks = findTodayPlanTaskByPiece(suggestion.piece);
+      if (existingTasks.length > 0) {
+        withConflict.push(suggestion);
+        const existingTask = existingTasks[0];
+        conflicts.push({
+          piece: suggestion.piece,
+          suggestionLabel: typeLabels[suggestion.type] || suggestion.type,
+          existingBpm: existingTask.targetBpm,
+          suggestedBpm: suggestion.planInfo.suggestedBpm,
+          suggestion
+        });
+      } else {
+        withoutConflict.push(suggestion);
+      }
+    }
+
+    let strategy = 'merge';
+
+    if (withConflict.length > 0) {
+      const preCheck = {
+        total: suggestions.length,
+        withConflict,
+        withoutConflict,
+        conflicts
+      };
+      const chosen = await showBatchStrategyDialog(preCheck);
+      if (chosen === null) {
+        return;
+      }
+      strategy = chosen;
+    }
+
     let created = 0;
     let merged = 0;
     let skipped = 0;
     let duplicates = 0;
 
-    for (const suggestion of suggestions) {
-      const existingTasks = findTodayPlanTaskByPiece(suggestion.piece);
+    for (const suggestion of withoutConflict) {
+      const newTask = createTaskFromSuggestion(suggestion);
+      if (newTask) {
+        planTasks.push(newTask);
+        created++;
+      }
+    }
 
-      if (existingTasks.length > 0) {
-        const existingTask = existingTasks[0];
+    for (const suggestion of withConflict) {
+      const existingTasks = findTodayPlanTaskByPiece(suggestion.piece);
+      if (existingTasks.length === 0) {
+        const newTask = createTaskFromSuggestion(suggestion);
+        if (newTask) { planTasks.push(newTask); created++; }
+        continue;
+      }
+
+      let action = strategy;
+      if (strategy === 'ask') {
+        action = await showConflictDialog(suggestion, existingTasks);
+      }
+
+      if (action === 'skip') {
+        skipped++;
+        continue;
+      }
+
+      const existingTask = existingTasks[0];
+      if (action === 'merge') {
         const mergedTask = mergeTaskWithSuggestion(existingTask, suggestion);
         planTasks = planTasks.map(t => t.id === existingTask.id ? mergedTask : t);
         merged++;
-      } else {
+      } else if (action === 'duplicate') {
         const newTask = createTaskFromSuggestion(suggestion);
         if (newTask) {
+          newTask.isDuplicate = true;
           planTasks.push(newTask);
-          created++;
+          duplicates++;
         }
       }
     }
@@ -6870,12 +7062,14 @@ const PlanGenerator = (() => {
     savePlan(planTasks);
     refreshAllRelatedViews();
 
+    const strategyLabel = { merge: '合并策略', skip: '跳过策略', duplicate: '副本策略', ask: '逐条选择' }[strategy];
+
     const summary = [
-      `✅ 批量生成完成！`,
-      created ? `🆕 新增任务: ${created} 个` : '',
-      merged ? `🔗 合并更新: ${merged} 个` : '',
-      skipped ? `⏭️ 跳过: ${skipped} 个` : '',
-      duplicates ? `📋 副本: ${duplicates} 个` : ''
+      `✅ 批量生成完成！（${strategyLabel}）`,
+      created ? `🆕 新增: ${created}` : '',
+      merged ? `🔗 合并: ${merged}` : '',
+      skipped ? `⏭️ 跳过: ${skipped}` : '',
+      duplicates ? `📋 副本: ${duplicates}` : ''
     ].filter(Boolean).join('  ·  ');
 
     const totalInPlan = planTasks.filter(t => t.date === getToday()).length;
