@@ -1832,6 +1832,21 @@ document.querySelector('#sample').addEventListener('click', async () => {
 
 let pendingImportData = null;
 let pendingImportType = 'records';
+let pendingImportConfig = {
+  modules: {
+    records: true,
+    library: true,
+    goals: true,
+    views: true,
+    plan: true
+  },
+  conflicts: {
+    records: {},
+    library: {},
+    views: {}
+  },
+  defaultConflictAction: 'keep'
+};
 
 const exportBtn = document.querySelector('#exportBtn');
 const importBtn = document.querySelector('#importBtn');
@@ -2219,6 +2234,18 @@ function renderImportPreview(result) {
   updateImportConfirmState();
 }
 
+function getRecordConflictKey(record) {
+  return `${record.date}__${record.piece}__${record.instrument}`;
+}
+
+function getLibraryConflictKey(item) {
+  return item.name;
+}
+
+function getViewConflictKey(view) {
+  return view.name;
+}
+
 function processFullBackupData(parsedData) {
   const result = {
     type: 'full-backup',
@@ -2227,29 +2254,72 @@ function processFullBackupData(parsedData) {
     hasGoals: false,
     hasViews: false,
     hasPlan: false,
-    records: null,
-    library: { items: [], newItems: [], existingItems: [] },
+    records: {
+      validRecords: [],
+      newRecords: [],
+      duplicateRecords: [],
+      invalidRecords: [],
+      allErrors: [],
+      conflicts: []
+    },
+    library: { items: [], newItems: [], existingItems: [], conflicts: [] },
     goals: { items: [], newItems: [], existingItems: [] },
-    views: { items: [], newItems: [], existingItems: [] },
+    views: { items: [], newItems: [], existingItems: [], conflicts: [] },
     plan: { dates: {}, totalTasks: 0, newTasks: 0, existingTasks: 0 }
   };
 
   if (parsedData.records !== undefined && Array.isArray(parsedData.records)) {
     result.hasRecords = true;
-    result.records = parsedData.records.length > 0
-      ? processImportData(parsedData.records)
-      : { validRecords: [], newRecords: [], duplicateRecords: [], invalidRecords: [], allErrors: [] };
+    if (parsedData.records.length > 0) {
+      const processed = processImportData(parsedData.records);
+      result.records.validRecords = processed.validRecords;
+      result.records.newRecords = processed.newRecords;
+      result.records.duplicateRecords = processed.duplicateRecords;
+      result.records.invalidRecords = processed.invalidRecords;
+      result.records.allErrors = processed.allErrors;
+
+      const existingRecordMap = new Map();
+      records.forEach(r => {
+        existingRecordMap.set(getRecordConflictKey(r), r);
+      });
+
+      result.records.conflicts = [];
+      result.records.validRecords.forEach(({ record, index }) => {
+        const key = getRecordConflictKey(record);
+        if (existingRecordMap.has(key)) {
+          result.records.conflicts.push({
+            key,
+            index,
+            backupRecord: record,
+            localRecord: existingRecordMap.get(key)
+          });
+        }
+      });
+
+      const conflictKeys = new Set(result.records.conflicts.map(c => c.key));
+      result.records.newRecords = result.records.validRecords.filter(
+        ({ record }) => !conflictKeys.has(getRecordConflictKey(record))
+      );
+    }
   } else {
-    result.records = { validRecords: [], newRecords: [], duplicateRecords: [], invalidRecords: [], allErrors: [] };
+    result.records = { validRecords: [], newRecords: [], duplicateRecords: [], invalidRecords: [], allErrors: [], conflicts: [] };
   }
 
   if (parsedData.library !== undefined && Array.isArray(parsedData.library)) {
     result.hasLibrary = true;
     result.library.items = parsedData.library;
-    const existingNames = new Set(library.map(item => item.name));
+    const existingByName = new Map();
+    library.forEach(item => existingByName.set(item.name, item));
+
     parsedData.library.forEach(item => {
-      if (existingNames.has(item.name)) {
+      const key = getLibraryConflictKey(item);
+      if (existingByName.has(key)) {
         result.library.existingItems.push(item);
+        result.library.conflicts.push({
+          key,
+          backupItem: item,
+          localItem: existingByName.get(key)
+        });
       } else {
         result.library.newItems.push(item);
       }
@@ -2273,10 +2343,18 @@ function processFullBackupData(parsedData) {
   if (parsedData.views !== undefined && Array.isArray(parsedData.views)) {
     result.hasViews = true;
     result.views.items = parsedData.views;
-    const existingNames = new Set(views.map(v => v.name));
+    const existingByName = new Map();
+    views.forEach(v => existingByName.set(v.name, v));
+
     parsedData.views.forEach(view => {
-      if (existingNames.has(view.name)) {
+      const key = getViewConflictKey(view);
+      if (existingByName.has(key)) {
         result.views.existingItems.push(view);
+        result.views.conflicts.push({
+          key,
+          backupView: view,
+          localView: existingByName.get(key)
+        });
       } else {
         result.views.newItems.push(view);
       }
@@ -2305,85 +2383,302 @@ function processFullBackupData(parsedData) {
     }
   }
 
+  pendingImportConfig = {
+    modules: {
+      records: result.hasRecords,
+      library: result.hasLibrary,
+      goals: result.hasGoals,
+      views: result.hasViews,
+      plan: result.hasPlan
+    },
+    conflicts: {
+      records: {},
+      library: {},
+      views: {}
+    },
+    defaultConflictAction: 'keep'
+  };
+
+  result.records.conflicts.forEach(c => {
+    pendingImportConfig.conflicts.records[c.key] = {
+      action: 'keep',
+      copyName: ''
+    };
+  });
+  result.library.conflicts.forEach(c => {
+    pendingImportConfig.conflicts.library[c.key] = {
+      action: 'keep',
+      copyName: `${c.key} (副本)`
+    };
+  });
+  result.views.conflicts.forEach(c => {
+    pendingImportConfig.conflicts.views[c.key] = {
+      action: 'keep',
+      copyName: `${c.key} (副本)`
+    };
+  });
+
   return result;
 }
 
 function renderFullBackupPreview(result) {
-  const { records, library, goals, views, plan } = result;
+  const { records, library, goals, views, plan, hasRecords, hasLibrary, hasGoals, hasViews, hasPlan } = result;
+  const cfg = pendingImportConfig;
 
   let html = '';
 
-  html += `
-    <span class="backupTypeBadge full">💾 完整备份</span>
-    <div class="backupSummary">
-      <div class="backupSummaryItem">
-        <span class="backupCount">${records.validRecords.length}</span>
-        <span class="backupLabel">有效记录</span>
-      </div>
-      <div class="backupSummaryItem">
-        <span class="backupCount">${library.items.length}</span>
-        <span class="backupLabel">曲目资料</span>
-      </div>
-      <div class="backupSummaryItem">
-        <span class="backupCount">${goals.items.length}</span>
-        <span class="backupLabel">练习目标</span>
-      </div>
-      <div class="backupSummaryItem">
-        <span class="backupCount">${views.items.length}</span>
-        <span class="backupLabel">筛选视图</span>
-      </div>
-      <div class="backupSummaryItem">
-        <span class="backupCount">${Object.keys(plan.dates).length}</span>
-        <span class="backupLabel">计划天数</span>
-      </div>
-    </div>
-  `;
+  html += `<span class="backupTypeBadge full">💾 完整备份</span>`;
 
   html += `
-    <div class="importModeSection">
-      <h3>导入模式</h3>
-      <label class="importModeOption">
-        <input type="radio" name="importMode" value="merge" checked />
-        <div>
-          <strong>合并导入</strong>
-          <span class="muted">将新数据合并到现有数据中，已有数据保持不变（推荐）</span>
-        </div>
-      </label>
-      <label class="importModeOption">
-        <input type="radio" name="importMode" value="overwrite" />
-        <div>
-          <strong>覆盖导入</strong>
-          <span class="muted">清除所有现有数据，仅保留导入的数据。此操作可通过历史版本回滚。</span>
-        </div>
-      </label>
-    </div>
+    <div class="moduleSelectSection">
+      <h3>📦 选择要导入的模块</h3>
+      <p class="muted small">勾选需要导入的模块，每个模块显示本地数量和备份中的数量</p>
+      <div class="moduleSelectGrid">
   `;
 
-  html += `
-    <div class="backupImportSection">
-      <h3>📊 数据明细</h3>
-      <div class="backupImportItem">
-        <span class="backupImportItemName">练习记录（有效/新增/重复/错误）</span>
-        <span class="backupImportItemCount">${records.validRecords.length} / ${records.newRecords.length} / ${records.duplicateRecords.length} / ${records.invalidRecords.length}</span>
-      </div>
-      <div class="backupImportItem">
-        <span class="backupImportItemName">曲目资料库（总数/新增/已有）</span>
-        <span class="backupImportItemCount">${library.items.length} / ${library.newItems.length} / ${library.existingItems.length}</span>
-      </div>
-      <div class="backupImportItem">
-        <span class="backupImportItemName">练习目标（总数/新增/已有）</span>
-        <span class="backupImportItemCount">${goals.items.length} / ${goals.newItems.length} / ${goals.existingItems.length}</span>
-      </div>
-      <div class="backupImportItem">
-        <span class="backupImportItemName">筛选视图（总数/新增/已有）</span>
-        <span class="backupImportItemCount">${views.items.length} / ${views.newItems.length} / ${views.existingItems.length}</span>
-      </div>
-      <div class="backupImportItem">
-        <span class="backupImportItemName">今日计划（总任务数/新增/已有）</span>
-        <span class="backupImportItemCount">${plan.totalTasks} / ${plan.newTasks} / ${plan.existingTasks}</span>
-      </div>
-    </div>
-  `;
+  const moduleConfigs = [
+    {
+      key: 'records',
+      name: '练习记录',
+      icon: '📝',
+      hasData: hasRecords,
+      localCount: records.length,
+      backupCount: records.validRecords.length,
+      backupDesc: records.validRecords.length ? `${records.validRecords.length} 有效 / ${records.newRecords.length} 新增 / ${records.conflicts.length} 冲突 / ${records.invalidRecords.length} 错误` : '无数据'
+    },
+    {
+      key: 'library',
+      name: '曲库',
+      icon: '📚',
+      hasData: hasLibrary,
+      localCount: library.length,
+      backupCount: library.items.length,
+      backupDesc: library.items.length ? `${library.items.length} 总计 / ${library.newItems.length} 新增 / ${library.conflicts.length} 冲突` : '无数据'
+    },
+    {
+      key: 'goals',
+      name: '练习目标',
+      icon: '🎯',
+      hasData: hasGoals,
+      localCount: goals.length,
+      backupCount: goals.items.length,
+      backupDesc: goals.items.length ? `${goals.items.length} 总计 / ${goals.newItems.length} 新增 / ${goals.existingItems.length} 已有` : '无数据'
+    },
+    {
+      key: 'views',
+      name: '筛选视图',
+      icon: '👁',
+      hasData: hasViews,
+      localCount: views.length,
+      backupCount: views.items.length,
+      backupDesc: views.items.length ? `${views.items.length} 总计 / ${views.newItems.length} 新增 / ${views.conflicts.length} 冲突` : '无数据'
+    },
+    {
+      key: 'plan',
+      name: '今日计划',
+      icon: '📅',
+      hasData: hasPlan,
+      localCount: Object.keys(JSON.parse(localStorage.getItem(planKey) || 'null') || {}).length,
+      backupCount: Object.keys(plan.dates).length,
+      backupDesc: plan.totalTasks ? `${Object.keys(plan.dates).length} 天 / ${plan.totalTasks} 任务 / ${plan.newTasks} 新增` : '无数据'
+    }
+  ];
+
+  moduleConfigs.forEach(mod => {
+    const checked = cfg.modules[mod.key] && mod.hasData;
+    const disabled = !mod.hasData;
+    html += `
+      <label class="moduleCard ${disabled ? 'disabled' : ''} ${checked ? 'active' : ''}">
+        <input type="checkbox" class="moduleCheckbox" data-module="${mod.key}" ${checked ? 'checked' : ''} ${disabled ? 'disabled' : ''} />
+        <div class="moduleCardIcon">${mod.icon}</div>
+        <div class="moduleCardBody">
+          <div class="moduleCardName">${mod.name}</div>
+          <div class="moduleCardCounts">
+            <span class="moduleCount local">本地: <strong>${mod.localCount}</strong></span>
+            <span class="moduleCount backup">备份: <strong>${mod.backupCount}</strong></span>
+          </div>
+          <div class="moduleCardDesc muted small">${mod.backupDesc}</div>
+        </div>
+      </label>
+    `;
+  });
+
+  html += `</div></div>`;
+
+  const totalConflicts = records.conflicts.length + library.conflicts.length + views.conflicts.length;
+  if (totalConflicts > 0) {
+    html += `
+      <div class="conflictSection">
+        <div class="conflictSectionHead">
+          <h3>⚠️ 冲突处理 (${totalConflicts})</h3>
+          <div class="conflictGlobalActions">
+            <span class="muted small">统一设置：</span>
+            <button type="button" class="secondary small conflictGlobalBtn" data-global-action="keep">保留本地</button>
+            <button type="button" class="secondary small conflictGlobalBtn" data-global-action="overwrite">覆盖本地</button>
+            <button type="button" class="secondary small conflictGlobalBtn" data-global-action="copy">另存为副本</button>
+          </div>
+        </div>
+        <p class="muted small">对于同名或重复的数据，选择如何处理：保留本地数据、用备份覆盖、或保存为副本</p>
+    `;
+
+    if (records.conflicts.length > 0) {
+      html += `
+        <div class="conflictGroup">
+          <div class="conflictGroupTitle">📝 练习记录冲突 (${records.conflicts.length})</div>
+          <div class="conflictGroupDesc muted small">同日期、同乐器、同曲目的练习记录</div>
+          <div class="conflictList">
+      `;
+      records.conflicts.forEach(c => {
+        const br = c.backupRecord;
+        const lr = c.localRecord;
+        const action = cfg.conflicts.records[c.key].action;
+        html += `
+          <div class="conflictItem" data-conflict-type="records" data-conflict-key="${escapeHtml(c.key)}">
+            <div class="conflictItemInfo">
+              <div class="conflictItemTitle">
+                <strong>${escapeHtml(br.piece)}</strong>
+                <span class="conflictItemMeta muted small">${escapeHtml(br.date)} · ${escapeHtml(br.instrument)}</span>
+              </div>
+              <div class="conflictCompare">
+                <div class="conflictCompareItem local">
+                  <div class="conflictCompareLabel">本地</div>
+                  <div class="conflictCompareValue">BPM ${lr.bpm} · ${lr.minutes}min · ${lr.mistakes}次错误</div>
+                </div>
+                <div class="conflictCompareItem backup">
+                  <div class="conflictCompareLabel">备份</div>
+                  <div class="conflictCompareValue">BPM ${br.bpm} · ${br.minutes}min · ${br.mistakes}次错误</div>
+                </div>
+              </div>
+            </div>
+            <div class="conflictItemActions">
+              <label class="conflictAction ${action === 'keep' ? 'active' : ''}">
+                <input type="radio" name="conflict_records_${escapeHtml(c.key)}" value="keep" ${action === 'keep' ? 'checked' : ''} />
+                <span>保留本地</span>
+              </label>
+              <label class="conflictAction ${action === 'overwrite' ? 'active' : ''}">
+                <input type="radio" name="conflict_records_${escapeHtml(c.key)}" value="overwrite" ${action === 'overwrite' ? 'checked' : ''} />
+                <span>覆盖本地</span>
+              </label>
+            </div>
+          </div>
+        `;
+      });
+      html += `</div></div>`;
+    }
+
+    if (library.conflicts.length > 0) {
+      html += `
+        <div class="conflictGroup">
+          <div class="conflictGroupTitle">📚 曲库冲突 (${library.conflicts.length})</div>
+          <div class="conflictGroupDesc muted small">同名的曲目资料</div>
+          <div class="conflictList">
+      `;
+      library.conflicts.forEach(c => {
+        const bi = c.backupItem;
+        const li = c.localItem;
+        const action = cfg.conflicts.library[c.key].action;
+        const copyName = cfg.conflicts.library[c.key].copyName;
+        html += `
+          <div class="conflictItem" data-conflict-type="library" data-conflict-key="${escapeHtml(c.key)}">
+            <div class="conflictItemInfo">
+              <div class="conflictItemTitle">
+                <strong>${escapeHtml(c.key)}</strong>
+                <span class="conflictItemMeta muted small">${escapeHtml(bi.instrument || li.instrument || '')}${bi.genre || li.genre ? ' · ' + escapeHtml(bi.genre || li.genre) : ''}</span>
+              </div>
+              <div class="conflictCompare">
+                <div class="conflictCompareItem local">
+                  <div class="conflictCompareLabel">本地</div>
+                  <div class="conflictCompareValue">目标BPM ${li.targetBpm || '—'} · ${(li.defaultSections || []).length} 个默认片段</div>
+                </div>
+                <div class="conflictCompareItem backup">
+                  <div class="conflictCompareLabel">备份</div>
+                  <div class="conflictCompareValue">目标BPM ${bi.targetBpm || '—'} · ${(bi.defaultSections || []).length} 个默认片段</div>
+                </div>
+              </div>
+              ${action === 'copy' ? `
+                <div class="conflictCopyNameInput">
+                  <label class="small muted">副本名称</label>
+                  <input type="text" class="conflictCopyInput" data-conflict-type="library" data-conflict-key="${escapeHtml(c.key)}" value="${escapeHtml(copyName)}" />
+                </div>
+              ` : ''}
+            </div>
+            <div class="conflictItemActions">
+              <label class="conflictAction ${action === 'keep' ? 'active' : ''}">
+                <input type="radio" name="conflict_library_${escapeHtml(c.key)}" value="keep" ${action === 'keep' ? 'checked' : ''} />
+                <span>保留本地</span>
+              </label>
+              <label class="conflictAction ${action === 'overwrite' ? 'active' : ''}">
+                <input type="radio" name="conflict_library_${escapeHtml(c.key)}" value="overwrite" ${action === 'overwrite' ? 'checked' : ''} />
+                <span>覆盖本地</span>
+              </label>
+              <label class="conflictAction ${action === 'copy' ? 'active' : ''}">
+                <input type="radio" name="conflict_library_${escapeHtml(c.key)}" value="copy" ${action === 'copy' ? 'checked' : ''} />
+                <span>另存为副本</span>
+              </label>
+            </div>
+          </div>
+        `;
+      });
+      html += `</div></div>`;
+    }
+
+    if (views.conflicts.length > 0) {
+      html += `
+        <div class="conflictGroup">
+          <div class="conflictGroupTitle">👁 筛选视图冲突 (${views.conflicts.length})</div>
+          <div class="conflictGroupDesc muted small">同名的筛选视图</div>
+          <div class="conflictList">
+      `;
+      views.conflicts.forEach(c => {
+        const bv = c.backupView;
+        const lv = c.localView;
+        const action = cfg.conflicts.views[c.key].action;
+        const copyName = cfg.conflicts.views[c.key].copyName;
+        html += `
+          <div class="conflictItem" data-conflict-type="views" data-conflict-key="${escapeHtml(c.key)}">
+            <div class="conflictItemInfo">
+              <div class="conflictItemTitle">
+                <strong>${escapeHtml(c.key)}</strong>
+              </div>
+              <div class="conflictCompare">
+                <div class="conflictCompareItem local">
+                  <div class="conflictCompareLabel">本地</div>
+                  <div class="conflictCompareValue">${getViewDesc(lv)}</div>
+                </div>
+                <div class="conflictCompareItem backup">
+                  <div class="conflictCompareLabel">备份</div>
+                  <div class="conflictCompareValue">${getViewDesc(bv)}</div>
+                </div>
+              </div>
+              ${action === 'copy' ? `
+                <div class="conflictCopyNameInput">
+                  <label class="small muted">副本名称</label>
+                  <input type="text" class="conflictCopyInput" data-conflict-type="views" data-conflict-key="${escapeHtml(c.key)}" value="${escapeHtml(copyName)}" />
+                </div>
+              ` : ''}
+            </div>
+            <div class="conflictItemActions">
+              <label class="conflictAction ${action === 'keep' ? 'active' : ''}">
+                <input type="radio" name="conflict_views_${escapeHtml(c.key)}" value="keep" ${action === 'keep' ? 'checked' : ''} />
+                <span>保留本地</span>
+              </label>
+              <label class="conflictAction ${action === 'overwrite' ? 'active' : ''}">
+                <input type="radio" name="conflict_views_${escapeHtml(c.key)}" value="overwrite" ${action === 'overwrite' ? 'checked' : ''} />
+                <span>覆盖本地</span>
+              </label>
+              <label class="conflictAction ${action === 'copy' ? 'active' : ''}">
+                <input type="radio" name="conflict_views_${escapeHtml(c.key)}" value="copy" ${action === 'copy' ? 'checked' : ''} />
+                <span>另存为副本</span>
+              </label>
+            </div>
+          </div>
+        `;
+      });
+      html += `</div></div>`;
+    }
+
+    html += `</div>`;
+  }
 
   if (records.allErrors.length > 0) {
     html += `
@@ -2397,10 +2692,84 @@ function renderFullBackupPreview(result) {
   }
 
   importPreview.innerHTML = html;
-  importPreview.querySelectorAll('input[name="importMode"]').forEach((radio) => {
-    radio.addEventListener('change', updateImportConfirmState);
+
+  importPreview.querySelectorAll('.moduleCheckbox').forEach(cb => {
+    cb.addEventListener('change', (e) => {
+      const mod = e.target.dataset.module;
+      pendingImportConfig.modules[mod] = e.target.checked;
+      e.target.closest('.moduleCard').classList.toggle('active', e.target.checked);
+      updateImportConfirmState();
+    });
   });
+
+  importPreview.querySelectorAll('.conflictItem input[type="radio"]').forEach(radio => {
+    radio.addEventListener('change', (e) => {
+      const conflictItem = e.target.closest('.conflictItem');
+      const type = conflictItem.dataset.conflictType;
+      const key = conflictItem.dataset.conflictKey;
+      const action = e.target.value;
+      pendingImportConfig.conflicts[type][key].action = action;
+
+      conflictItem.querySelectorAll('.conflictAction').forEach(a => a.classList.remove('active'));
+      e.target.closest('.conflictAction').classList.add('active');
+
+      if (type === 'library' || type === 'views') {
+        let copyInputWrap = conflictItem.querySelector('.conflictCopyNameInput');
+        if (action === 'copy') {
+          if (!copyInputWrap) {
+            const infoDiv = conflictItem.querySelector('.conflictItemInfo');
+            const existingName = pendingImportConfig.conflicts[type][key].copyName || `${key} (副本)`;
+            pendingImportConfig.conflicts[type][key].copyName = existingName;
+            const wrap = document.createElement('div');
+            wrap.className = 'conflictCopyNameInput';
+            wrap.innerHTML = `
+              <label class="small muted">副本名称</label>
+              <input type="text" class="conflictCopyInput" data-conflict-type="${type}" data-conflict-key="${escapeHtml(key)}" value="${escapeHtml(existingName)}" />
+            `;
+            infoDiv.appendChild(wrap);
+            wrap.querySelector('.conflictCopyInput').addEventListener('input', onConflictCopyNameChange);
+          }
+        } else {
+          if (copyInputWrap) copyInputWrap.remove();
+        }
+      }
+      updateImportConfirmState();
+    });
+  });
+
+  importPreview.querySelectorAll('.conflictCopyInput').forEach(input => {
+    input.addEventListener('input', onConflictCopyNameChange);
+  });
+
+  importPreview.querySelectorAll('.conflictGlobalBtn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const action = btn.dataset.globalAction;
+      ['records', 'library', 'views'].forEach(type => {
+        for (const key in pendingImportConfig.conflicts[type]) {
+          pendingImportConfig.conflicts[type][key].action = action;
+        }
+      });
+      renderFullBackupPreview(result);
+    });
+  });
+
   updateImportConfirmState();
+}
+
+function onConflictCopyNameChange(e) {
+  const type = e.target.dataset.conflictType;
+  const key = e.target.dataset.conflictKey;
+  pendingImportConfig.conflicts[type][key].copyName = e.target.value;
+}
+
+function getViewDesc(view) {
+  const f = view.filters || {};
+  const parts = [];
+  if (f.instrument) parts.push(`乐器:${f.instrument}`);
+  if (f.piece) parts.push(`曲目:${f.piece}`);
+  if (f.dateStart || f.dateEnd) parts.push(`日期:${f.dateStart || '?'}~${f.dateEnd || '?'}`);
+  if (f.bpmMin || f.bpmMax) parts.push(`BPM:${f.bpmMin || '?'}~${f.bpmMax || '?'}`);
+  return parts.length ? parts.join(' · ') : '（空筛选）';
 }
 
 function getSelectedImportMode() {
@@ -2415,30 +2784,66 @@ function updateImportConfirmState() {
     return;
   }
 
-  const mode = getSelectedImportMode();
-
   if (pendingImportType === 'full-backup') {
-    const { hasRecords, hasLibrary, hasGoals, hasViews, hasPlan } = pendingImportData;
-    const hasAny = hasRecords || hasLibrary || hasGoals || hasViews || hasPlan;
-    const hasNewData = (
-      pendingImportData.records.newRecords.length > 0 ||
-      pendingImportData.library.newItems.length > 0 ||
-      pendingImportData.goals.newItems.length > 0 ||
-      pendingImportData.views.newItems.length > 0 ||
-      pendingImportData.plan.newTasks > 0
-    );
+    const cfg = pendingImportConfig;
+    const { records, library, goals, views, plan } = pendingImportData;
 
-    const hasData = mode === 'overwrite' ? hasAny : hasNewData;
+    let totalToImport = 0;
+    const importSummary = [];
 
-    modalConfirm.disabled = !hasData;
-    if (!hasData) {
-      modalConfirm.textContent = mode === 'overwrite' ? '无有效数据可覆盖' : '无新增数据可导入';
+    if (cfg.modules.records) {
+      let count = records.newRecords.length;
+      for (const key in cfg.conflicts.records) {
+        if (cfg.conflicts.records[key].action !== 'keep') count++;
+      }
+      if (count > 0) {
+        totalToImport += count;
+        importSummary.push(`练习记录 ${count}`);
+      }
+    }
+    if (cfg.modules.library) {
+      let count = library.newItems.length;
+      for (const key in cfg.conflicts.library) {
+        if (cfg.conflicts.library[key].action !== 'keep') count++;
+      }
+      if (count > 0) {
+        totalToImport += count;
+        importSummary.push(`曲库 ${count}`);
+      }
+    }
+    if (cfg.modules.goals) {
+      let count = goals.newItems.length;
+      if (count > 0) {
+        totalToImport += count;
+        importSummary.push(`目标 ${count}`);
+      }
+    }
+    if (cfg.modules.views) {
+      let count = views.newItems.length;
+      for (const key in cfg.conflicts.views) {
+        if (cfg.conflicts.views[key].action !== 'keep') count++;
+      }
+      if (count > 0) {
+        totalToImport += count;
+        importSummary.push(`筛选视图 ${count}`);
+      }
+    }
+    if (cfg.modules.plan) {
+      let count = plan.newTasks;
+      if (count > 0) {
+        totalToImport += count;
+        importSummary.push(`计划 ${count}`);
+      }
+    }
+
+    modalConfirm.disabled = totalToImport === 0;
+    if (totalToImport === 0) {
+      modalConfirm.textContent = '无数据可导入';
     } else {
-      modalConfirm.textContent = mode === 'overwrite'
-        ? '确认覆盖导入全部数据'
-        : '确认合并导入新增数据';
+      modalConfirm.textContent = `确认导入 (${importSummary.join(', ')})`;
     }
   } else {
+    const mode = getSelectedImportMode();
     const importCount = mode === 'overwrite'
       ? pendingImportData.validRecords.length
       : pendingImportData.newRecords.length;
@@ -2539,11 +2944,10 @@ importFile.addEventListener('change', async (e) => {
 modalConfirm.addEventListener('click', async () => {
   if (!pendingImportData) return;
 
-  const mode = getSelectedImportMode();
-
   if (pendingImportType === 'full-backup') {
-    await handleFullBackupImport(mode);
+    await handleFullBackupImport();
   } else {
+    const mode = getSelectedImportMode();
     const newRecords = pendingImportData.newRecords.map(item => item.record);
     const validRecords = pendingImportData.validRecords.map(item => item.record);
     const recordsToImport = mode === 'overwrite' ? validRecords : newRecords;
@@ -2576,139 +2980,208 @@ modalConfirm.addEventListener('click', async () => {
   }
 });
 
-async function handleFullBackupImport(mode) {
+async function handleFullBackupImport() {
+  const cfg = pendingImportConfig;
   const {
-    hasRecords, hasLibrary, hasGoals, hasViews, hasPlan,
     records: recordData, library: libData, goals: goalsData, views: viewsData, plan: planData
   } = pendingImportData;
 
-  const newRecordCount = recordData.newRecords.length;
-  const validRecordCount = recordData.validRecords.length;
-  const recordCount = mode === 'overwrite' ? validRecordCount : newRecordCount;
+  const importSummary = [];
+  let recordsImported = 0;
+  let libraryImported = 0;
+  let goalsImported = 0;
+  let viewsImported = 0;
+  let planTasksImported = 0;
 
-  const libCount = mode === 'overwrite' ? libData.items.length : libData.newItems.length;
-  const goalCount = mode === 'overwrite' ? goalsData.items.length : goalsData.newItems.length;
-  const viewCount = mode === 'overwrite' ? viewsData.items.length : viewsData.newItems.length;
-  const planTaskCount = mode === 'overwrite' ? planData.totalTasks : planData.newTasks;
+  if (cfg.modules.records) {
+    let newRecs = recordData.newRecords.map(item => item.record);
+    for (const conflict of recordData.conflicts) {
+      const decision = cfg.conflicts.records[conflict.key];
+      if (decision.action === 'overwrite') {
+        newRecs.push(conflict.backupRecord);
+      }
+    }
 
-  const hasAnyData = hasRecords || hasLibrary || hasGoals || hasViews || hasPlan;
-  if (!hasAnyData) {
-    return;
+    if (newRecs.length > 0) {
+      const existingRecords = records.filter(r => {
+        const key = getRecordConflictKey(r);
+        const decision = cfg.conflicts.records[key];
+        return !decision || decision.action !== 'overwrite';
+      });
+      const finalRecords = [...existingRecords, ...newRecs];
+      const versionResult = VersionManager.recordChange('import', finalRecords, {
+        count: newRecs.length,
+        type: 'full-backup'
+      });
+      records = versionResult.records;
+      recordsImported = newRecs.length;
+      importSummary.push(`练习记录: ${newRecs.length} 条`);
+    }
   }
 
-  if (mode === 'overwrite') {
-    let confirmMsg = '确定要用导入的数据覆盖现有数据吗？\n\n将覆盖：\n';
-    if (hasRecords) confirmMsg += `- ${validRecordCount} 条练习记录\n`;
-    else confirmMsg += '- （无记录数据，不覆盖记录）\n';
-    if (hasLibrary) confirmMsg += `- ${libData.items.length} 条曲目资料\n`;
-    else confirmMsg += '- （无资料库数据，不覆盖）\n';
-    if (hasGoals) confirmMsg += `- ${goalsData.items.length} 个练习目标\n`;
-    else confirmMsg += '- （无目标数据，不覆盖）\n';
-    if (hasViews) confirmMsg += `- ${viewsData.items.length} 个筛选视图\n`;
-    else confirmMsg += '- （无视图数据，不覆盖）\n';
-    if (hasPlan) confirmMsg += `- ${Object.keys(planData.dates).length} 天的计划任务\n`;
-    else confirmMsg += '- （无计划数据，不覆盖）\n';
-    confirmMsg += '\n此操作可通过历史版本回滚（仅练习记录）。';
+  if (cfg.modules.library) {
+    const currentLib = LibraryManager.getAll();
+    const existingByName = new Map(currentLib.map(item => [item.name, item]));
+    let newItems = [];
+    const updatedItemNames = new Set();
 
-    const confirmed = await showConfirm('覆盖导入确认', confirmMsg);
-    if (!confirmed) return;
-  }
-
-  if (hasRecords) {
-    let finalRecords;
-    if (mode === 'overwrite') {
-      const newRecs = recordData.validRecords.map(item => item.record);
-      finalRecords = newRecs;
-    } else {
-      const newRecs = recordData.newRecords.map(item => item.record);
-      finalRecords = [...newRecs, ...records];
-    }
-
-    const versionResult = VersionManager.recordChange('import', finalRecords, {
-      count: recordCount,
-      mode,
-      type: 'full-backup'
-    });
-    records = versionResult.records;
-  }
-
-  if (mode === 'overwrite') {
-    if (hasLibrary) {
-      localStorage.setItem(libraryKey, JSON.stringify(libData.items));
-      library = LibraryManager.getAll();
-    }
-    if (hasGoals) {
-      goals = goalsData.items;
-      saveGoals(goals);
-    }
-    if (hasViews) {
-      views = viewsData.items;
-      saveViews();
-    }
-    if (hasPlan) {
-      localStorage.setItem(planKey, JSON.stringify(planData.dates));
-      planTasks = loadPlan();
-    }
-  } else {
-    if (libData.newItems.length > 0) {
-      const currentLib = LibraryManager.getAll();
-      const newLibItems = libData.newItems.map(item => ({
+    libData.newItems.forEach(item => {
+      newItems.push({
         ...item,
         id: crypto.randomUUID(),
         createdAt: item.createdAt || new Date().toISOString()
-      }));
-      const merged = [...currentLib, ...newLibItems];
-      localStorage.setItem(libraryKey, JSON.stringify(merged));
-      library = LibraryManager.getAll();
+      });
+    });
+
+    for (const conflict of libData.conflicts) {
+      const decision = cfg.conflicts.library[conflict.key];
+      if (decision.action === 'overwrite') {
+        updatedItemNames.add(conflict.key);
+      } else if (decision.action === 'copy') {
+        let copyName = decision.copyName?.trim() || `${conflict.key} (副本)`;
+        let counter = 2;
+        const baseName = copyName;
+        while (existingByName.has(copyName) || newItems.some(i => i.name === copyName)) {
+          copyName = `${baseName} ${counter}`;
+          counter++;
+        }
+        newItems.push({
+          ...conflict.backupItem,
+          id: crypto.randomUUID(),
+          name: copyName,
+          createdAt: conflict.backupItem.createdAt || new Date().toISOString()
+        });
+      }
     }
-    if (goalsData.newItems.length > 0) {
-      const newGoals = goalsData.newItems.map(goal => ({
-        ...goal,
-        id: crypto.randomUUID(),
-        createdAt: goal.createdAt || new Date().toISOString()
-      }));
-      goals = [...goals, ...newGoals];
-      saveGoals(goals);
+
+    const mergedLib = currentLib.map(item => {
+      if (updatedItemNames.has(item.name)) {
+        const backupItem = libData.conflicts.find(c => c.key === item.name);
+        if (backupItem) {
+          return {
+            ...backupItem.backupItem,
+            id: item.id,
+            createdAt: item.createdAt,
+            updatedAt: new Date().toISOString()
+          };
+        }
+      }
+      return item;
+    });
+    const finalLib = [...mergedLib, ...newItems];
+    localStorage.setItem(libraryKey, JSON.stringify(finalLib));
+    library = LibraryManager.getAll();
+    const totalLibrary = newItems.length + updatedItemNames.size;
+    if (totalLibrary > 0) {
+      libraryImported = totalLibrary;
+      importSummary.push(`曲库: ${totalLibrary} 条`);
     }
-    if (viewsData.newItems.length > 0) {
-      const newViews = viewsData.newItems.map(view => ({
+  }
+
+  if (cfg.modules.goals && goalsData.newItems.length > 0) {
+    const newGoals = goalsData.newItems.map(goal => ({
+      ...goal,
+      id: crypto.randomUUID(),
+      createdAt: goal.createdAt || new Date().toISOString()
+    }));
+    goals = [...goals, ...newGoals];
+    saveGoals(goals);
+    goalsImported = newGoals.length;
+    importSummary.push(`练习目标: ${newGoals.length} 个`);
+  }
+
+  if (cfg.modules.views) {
+    const existingByName = new Map(views.map(v => [v.name, v]));
+    let newItems = [];
+    const updatedViewNames = new Set();
+
+    viewsData.newItems.forEach(view => {
+      newItems.push({
         ...view,
         id: crypto.randomUUID(),
         createdAt: view.createdAt || new Date().toISOString(),
         updatedAt: view.updatedAt || new Date().toISOString()
-      }));
-      views = [...views, ...newViews];
-      saveViews();
+      });
+    });
+
+    for (const conflict of viewsData.conflicts) {
+      const decision = cfg.conflicts.views[conflict.key];
+      if (decision.action === 'overwrite') {
+        updatedViewNames.add(conflict.key);
+      } else if (decision.action === 'copy') {
+        let copyName = decision.copyName?.trim() || `${conflict.key} (副本)`;
+        let counter = 2;
+        const baseName = copyName;
+        while (existingByName.has(copyName) || newItems.some(v => v.name === copyName)) {
+          copyName = `${baseName} ${counter}`;
+          counter++;
+        }
+        newItems.push({
+          ...conflict.backupView,
+          id: crypto.randomUUID(),
+          name: copyName,
+          createdAt: conflict.backupView.createdAt || new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        });
+      }
     }
-    if (planData.newTasks > 0) {
-      const existingPlan = JSON.parse(localStorage.getItem(planKey) || 'null') || {};
-      for (const date in planData.dates) {
-        const tasks = planData.dates[date];
-        if (Array.isArray(tasks) && tasks.length > 0) {
-          const existingTasks = existingPlan[date] || [];
-          const existingKeys = new Set(existingTasks.map(t => `${t.piece}-${t.targetBpm}-${t.estimatedMinutes}`));
-          const newTasks = tasks
-            .filter(t => !existingKeys.has(`${t.piece}-${t.targetBpm}-${t.estimatedMinutes}`))
-            .map(t => ({ ...t, id: crypto.randomUUID() }));
-          existingPlan[date] = [...existingTasks, ...newTasks];
+
+    const mergedViews = views.map(v => {
+      if (updatedViewNames.has(v.name)) {
+        const backupView = viewsData.conflicts.find(c => c.key === v.name);
+        if (backupView) {
+          return {
+            ...backupView.backupView,
+            id: v.id,
+            createdAt: v.createdAt,
+            updatedAt: new Date().toISOString()
+          };
         }
       }
-      localStorage.setItem(planKey, JSON.stringify(existingPlan));
-      planTasks = loadPlan();
+      return v;
+    });
+    views = [...mergedViews, ...newItems];
+    saveViews();
+    const totalViews = newItems.length + updatedViewNames.size;
+    if (totalViews > 0) {
+      viewsImported = totalViews;
+      importSummary.push(`筛选视图: ${totalViews} 个`);
+    }
+  }
+
+  if (cfg.modules.plan && planData.newTasks > 0) {
+    const existingPlan = JSON.parse(localStorage.getItem(planKey) || 'null') || {};
+    let addedTasks = 0;
+    for (const date in planData.dates) {
+      const tasks = planData.dates[date];
+      if (Array.isArray(tasks) && tasks.length > 0) {
+        const existingTasks = existingPlan[date] || [];
+        const existingKeys = new Set(existingTasks.map(t => `${t.piece}-${t.targetBpm}-${t.estimatedMinutes}`));
+        const newTasks = tasks
+          .filter(t => !existingKeys.has(`${t.piece}-${t.targetBpm}-${t.estimatedMinutes}`))
+          .map(t => ({ ...t, id: crypto.randomUUID() }));
+        if (newTasks.length > 0) {
+          existingPlan[date] = [...existingTasks, ...newTasks];
+          addedTasks += newTasks.length;
+        }
+      }
+    }
+    localStorage.setItem(planKey, JSON.stringify(existingPlan));
+    planTasks = loadPlan();
+    planTasksImported = addedTasks;
+    if (addedTasks > 0) {
+      importSummary.push(`计划任务: ${addedTasks} 条`);
     }
   }
 
   render();
   closeImportModal();
 
-  const modeText = mode === 'overwrite' ? '（覆盖模式）' : '（合并模式）';
-  const details = [];
-  if (hasRecords) details.push(`练习记录: ${recordCount} 条`);
-  if (hasLibrary) details.push(`曲目资料: ${libCount} 条`);
-  if (hasGoals) details.push(`练习目标: ${goalCount} 个`);
-  if (hasViews) details.push(`筛选视图: ${viewCount} 个`);
-  if (hasPlan) details.push(`计划任务: ${planTaskCount} 条`);
-  alert(`成功导入完整备份${modeText}！\n\n${details.join('\n')}`);
+  if (importSummary.length > 0) {
+    alert(`成功导入完整备份！\n\n${importSummary.join('\n')}`);
+  } else {
+    alert('没有数据被导入。');
+  }
 }
 
 function showPrompt(title, message, placeholder = '', defaultValue = '') {
