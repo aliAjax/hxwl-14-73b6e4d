@@ -4097,6 +4097,369 @@ td button { margin-left: 6px; background: #dff3ef; }
   font-size: 12px;
   color: #dc2626;
 }
+
+.suggestionHeadActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.planPreview {
+  margin-top: 12px;
+  padding: 14px;
+  border: 2px solid;
+  border-radius: 10px;
+  display: grid;
+  gap: 12px;
+}
+
+.planPreviewHead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.planPreviewIcon {
+  font-size: 18px;
+}
+
+.planPreviewTitle {
+  font-size: 14px;
+  font-weight: 700;
+  color: #172522;
+}
+
+.planGoalBadge {
+  font-size: 11px;
+  padding: 3px 8px;
+  background: #ede9fe;
+  color: #6d28d9;
+  border-radius: 4px;
+  font-weight: 600;
+}
+
+.planPreviewMetrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 10px;
+}
+
+.planPreviewMetric {
+  background: white;
+  border: 1px solid #e4efec;
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+
+.ppmLabel {
+  display: block;
+  font-size: 11px;
+  color: #60736f;
+  font-weight: 500;
+  margin-bottom: 4px;
+}
+
+.ppmValue {
+  font-size: 18px;
+  font-weight: 700;
+  color: #172522;
+}
+
+.ppmSub {
+  font-size: 12px;
+  color: #60736f;
+  margin-left: 4px;
+  font-weight: 500;
+}
+
+.planPreviewSections {
+  background: white;
+  border: 1px solid #e4efec;
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.planPreviewSectionsTitle {
+  font-size: 13px;
+  font-weight: 600;
+  color: #172522;
+  margin-bottom: 8px;
+}
+
+.planPreviewSectionsList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.focusSectionTag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  background: #f6faf8;
+  border: 1px solid #e4efec;
+  border-radius: 6px;
+  font-size: 12px;
+  transition: all 0.15s ease;
+}
+
+.focusSectionTag:hover {
+  background: #edf6f2;
+  border-color: #cfe2de;
+}
+
+.fstName {
+  font-weight: 600;
+  color: #172522;
+}
+
+.fstMeta {
+  color: #0f766e;
+  font-weight: 600;
+  font-size: 11px;
+  background: rgba(15, 118, 110, 0.08);
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+
+.fstBadge {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-weight: 600;
+}
+
+.planPreviewActions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.inPlanBadge {
+  font-size: 12px;
+  padding: 4px 10px;
+  background: #d1fae5;
+  color: #065f46;
+  border-radius: 6px;
+  font-weight: 600;
+}
+
+.inPlanBadge.small {
+  font-size: 11px;
+  padding: 3px 8px;
+  align-self: flex-start;
+}
+
+.conflictDialog {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.conflictDialogOverlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(23, 37, 34, 0.65);
+  backdrop-filter: blur(6px);
+}
+
+.conflictDialogContent {
+  position: relative;
+  background: white;
+  border-radius: 16px;
+  max-width: 640px;
+  width: 92%;
+  box-shadow: 0 32px 80px rgba(23, 37, 34, 0.3);
+  overflow: hidden;
+  animation: conflictDialogIn 0.2s ease-out;
+}
+
+@keyframes conflictDialogIn {
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.conflictDialogHeader {
+  padding: 22px 24px 18px;
+  background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+  border-bottom: 1px solid #fcd34d;
+}
+
+.conflictDialogHeader h3 {
+  margin: 0 0 6px 0;
+  font-size: 18px;
+  font-weight: 700;
+  color: #78350f;
+}
+
+.conflictDialogSub {
+  margin: 0;
+  font-size: 14px;
+  color: #92400e;
+  font-weight: 500;
+}
+
+.conflictCompare {
+  padding: 20px 24px;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: 12px;
+  align-items: stretch;
+}
+
+.conflictCompareCard {
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 14px 16px;
+  display: grid;
+  gap: 8px;
+}
+
+.conflictCompareTitle {
+  font-size: 13px;
+  font-weight: 700;
+  color: #374151;
+  padding-bottom: 6px;
+  border-bottom: 1px dashed #d1d5db;
+}
+
+.conflictCompareBpm,
+.conflictCompareTime {
+  font-size: 13px;
+  color: #4b5563;
+}
+
+.conflictCompareBpm strong,
+.conflictCompareTime strong {
+  color: #172522;
+  font-size: 15px;
+}
+
+.conflictCompareSections {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.conflictCompareSub {
+  font-size: 11px;
+  color: #6b7280;
+  background: #e5e7eb;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-weight: 500;
+}
+
+.conflictCompareBadge {
+  font-size: 10px;
+  padding: 2px 7px;
+  border-radius: 4px;
+  font-weight: 600;
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.conflictCompareBadge.done {
+  background: #e5e7eb;
+  color: #4b5563;
+}
+
+.conflictCompareBadge.goal {
+  background: #ede9fe;
+  color: #6d28d9;
+}
+
+.conflictCompareArrow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  font-weight: 700;
+  color: #9ca3af;
+}
+
+.conflictDialogActions {
+  padding: 16px 24px 8px;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+
+.conflictDialogActions button {
+  padding: 12px 14px;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 13px;
+  border: none;
+  transition: all 0.15s ease;
+}
+
+.conflictDialogActions #conflictMergeBtn {
+  background: #0f766e;
+  color: white;
+}
+
+.conflictDialogActions #conflictMergeBtn:hover {
+  background: #0d655d;
+}
+
+.conflictDialogActions #conflictSkipBtn,
+.conflictDialogActions #conflictDuplicateBtn {
+  background: #f3f4f6;
+  color: #374151;
+  border: 1px solid #d1d5db;
+}
+
+.conflictDialogActions #conflictSkipBtn:hover,
+.conflictDialogActions #conflictDuplicateBtn:hover {
+  background: #e5e7eb;
+}
+
+.conflictDialogHints {
+  padding: 8px 24px 22px;
+  display: grid;
+  gap: 4px;
+}
+
+.conflictDialogHints > div {
+  font-size: 12px;
+  color: #6b7280;
+  line-height: 1.5;
+}
+
+.conflictDialogHints strong {
+  color: #374151;
+  font-weight: 600;
+}
+
+@media (max-width: 600px) {
+  .conflictCompare {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+  .conflictCompareArrow {
+    transform: rotate(90deg);
+  }
+  .conflictDialogActions {
+    grid-template-columns: 1fr;
+  }
+  .planPreviewMetrics {
+    grid-template-columns: 1fr 1fr;
+  }
+}
 .migrationToastSnapshot {
   margin-top: 8px;
   font-size: 11px;

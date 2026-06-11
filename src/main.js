@@ -2295,8 +2295,13 @@ document.querySelector('#app').innerHTML = `
 
     <section class="panel suggestionPanel">
       <div class="panelHead">
-        <h2>🎯 智能练习建议</h2>
-        <span class="muted" id="suggestionMeta"></span>
+        <div>
+          <h2>🎯 智能练习建议</h2>
+          <span class="muted" id="suggestionMeta"></span>
+        </div>
+        <div class="suggestionHeadActions" id="suggestionHeadActions" style="display:none;">
+          <button class="primary small" id="generateAllPlansBtn">✨ 一键生成今日练习计划</button>
+        </div>
       </div>
       <div id="suggestionOverview" class="suggestionOverview"></div>
       <div id="suggestionList" class="suggestionList"></div>
@@ -4448,6 +4453,16 @@ function renderSuggestions() {
   const { overall, suggestions, conservative } = result;
   metaEl.textContent = `分析 ${overall.totalRecords} 条记录 · ${overall.activePieces} 首曲目 · 累计 ${overall.totalMinutes} 分钟`;
 
+  const headActionsEl = document.querySelector('#suggestionHeadActions');
+  if (headActionsEl) {
+    const actionableCount = suggestions.filter(s => s.planInfo).length;
+    headActionsEl.style.display = actionableCount > 0 ? 'flex' : 'none';
+    const genAllBtn = document.querySelector('#generateAllPlansBtn');
+    if (genAllBtn) {
+      genAllBtn.dataset.total = actionableCount;
+    }
+  }
+
   const typeCounts = suggestions.reduce((acc, s) => {
     acc[s.type] = (acc[s.type] || 0) + 1;
     return acc;
@@ -4524,6 +4539,26 @@ function renderSuggestions() {
       document.querySelector('#rows').scrollIntoView({ behavior: 'smooth', block: 'start' });
     });
   });
+
+  listEl.querySelectorAll('.generatePlanBtn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const pieceName = btn.dataset.suggestionId;
+      const suggestionType = btn.dataset.suggestionType;
+      const action = btn.dataset.action;
+      const allSuggestions = SuggestionEngine.generateSuggestions();
+      const suggestion = allSuggestions.suggestions.find(s => s.piece === pieceName && s.type === suggestionType);
+      if (suggestion && suggestion.planInfo) {
+        handleSuggestionToPlan(suggestion);
+      }
+    });
+  });
+
+  const genAllBtn = document.querySelector('#generateAllPlansBtn');
+  if (genAllBtn) {
+    genAllBtn.onclick = () => {
+      batchGenerateAllPlans();
+    };
+  }
 }
 
 function renderSuggestionCard(s) {
@@ -4555,6 +4590,8 @@ function renderSuggestionCard(s) {
   };
 
   const metrics = metricsByType[s.type] || [];
+  const planInfo = s.planInfo || null;
+  const existingTask = planInfo ? planTasks.find(t => t.piece === s.piece && !t.completed && t.date === getToday()) : null;
 
   return `
     <article class="suggestionCard" style="border-color: ${s.color}20;">
@@ -4571,6 +4608,7 @@ function renderSuggestionCard(s) {
               <span class="muted" style="font-size: 12px;">${escapeHtml(s.instrument)}</span>
             </div>
           </div>
+          ${existingTask ? `<span class="inPlanBadge small">已在计划中</span>` : ''}
         </div>
         <span class="suggestionPriority p${s.priority}">${priorityLabels[s.priority] || '建议'}</span>
       </div>
@@ -4592,9 +4630,51 @@ function renderSuggestionCard(s) {
           <span class="suggestionActionIcon">💡</span>
           <div class="suggestionActionText">${s.suggestion}</div>
         </div>
-        <button type="button" class="secondary small" data-suggestion-filter="${escapeHtml(s.piece)}" style="justify-self: start; margin-top: 4px;">
+        ${planInfo ? `
+          <div class="planPreview" style="border-color: ${s.color}30; background: ${s.color}08;">
+            <div class="planPreviewHead">
+              <span class="planPreviewIcon">📋</span>
+              <strong class="planPreviewTitle">可执行练习安排</strong>
+              ${planInfo.hasGoal ? `<span class="planGoalBadge">关联目标</span>` : ''}
+            </div>
+            <div class="planPreviewMetrics">
+              <div class="planPreviewMetric">
+                <span class="ppmLabel">建议 BPM</span>
+                <strong class="ppmValue" style="color: ${s.color};">${planInfo.suggestedBpm}</strong>
+                ${planInfo.targetBpm && planInfo.targetBpm !== planInfo.suggestedBpm ? `<span class="ppmSub">/ 目标 ${planInfo.targetBpm}</span>` : ''}
+              </div>
+              <div class="planPreviewMetric">
+                <span class="ppmLabel">建议时长</span>
+                <strong class="ppmValue">${planInfo.estimatedMinutes} 分钟</strong>
+              </div>
+            </div>
+            ${planInfo.focusSections && planInfo.focusSections.length ? `
+              <div class="planPreviewSections">
+                <div class="planPreviewSectionsTitle">🎯 重点练习片段：</div>
+                <div class="planPreviewSectionsList">
+                  ${planInfo.focusSections.map(fs => `
+                    <div class="focusSectionTag" title="${escapeHtml(fs.focusReason)}${fs.note ? ' · ' + escapeHtml(fs.note) : ''}">
+                      <span class="fstName">${escapeHtml(fs.name)}</span>
+                      <span class="fstMeta">${fs.suggestedBpm} BPM</span>
+                      <span class="fstBadge" style="background:${s.color}20;color:${s.color};">${escapeHtml(fs.focusReason)}</span>
+                    </div>
+                  `).join('')}
+                </div>
+              </div>
+            ` : ''}
+            <div class="planPreviewActions">
+              ${existingTask
+                ? `<button type="button" class="secondary small generatePlanBtn" data-action="check" data-suggestion-id="${s.piece}" data-suggestion-type="${s.type}" title="今日已存在同曲目任务">🔄 处理已有任务</button>`
+                : `<button type="button" class="primary small generatePlanBtn" data-action="generate" data-suggestion-id="${s.piece}" data-suggestion-type="${s.type}">➕ 生成今日计划</button>`
+              }
+              <button type="button" class="secondary small" data-suggestion-filter="${escapeHtml(s.piece)}">🔍 查看记录</button>
+            </div>
+          </div>
+        ` : `
+          <button type="button" class="secondary small" data-suggestion-filter="${escapeHtml(s.piece)}" style="justify-self: start; margin-top: 4px;">
           🔍 查看该曲目记录
         </button>
+        `}
       </div>
     </article>
   `;
@@ -6251,6 +6331,88 @@ const SuggestionEngine = (() => {
     return { trend: 'stable', totalDelta, spike };
   }
 
+  function buildPlanInfo(track, type, suggestedBpm) {
+    const libItem = typeof LibraryManager !== 'undefined' ? LibraryManager.getByName(track.piece) : null;
+    const libSections = (libItem && libItem.defaultSections) ? libItem.defaultSections : [];
+    const sectionStats = typeof getSectionStats !== 'undefined' ? getSectionStats(track.records) : [];
+
+    const focusSectionNames = new Set();
+    if (type === 'speedup') {
+      sectionStats
+        .filter(s => s.latestMastery <= 3 && s.practiceCount >= 1)
+        .sort((a, b) => (b.maxBpm / (suggestedBpm || 1)) - (a.maxBpm / (suggestedBpm || 1)))
+        .slice(0, 3)
+        .forEach(s => focusSectionNames.add(s.name));
+      if (focusSectionNames.size === 0) {
+        sectionStats.slice(0, 3).forEach(s => focusSectionNames.add(s.name));
+      }
+    } else if (type === 'slowdown' || type === 'spike') {
+      sectionStats
+        .filter(s => s.mistakeTrend > 0 || s.latestMastery <= 2)
+        .sort((a, b) => b.mistakeTrend - a.mistakeTrend)
+        .slice(0, 3)
+        .forEach(s => focusSectionNames.add(s.name));
+      if (focusSectionNames.size === 0) {
+        sectionStats.sort((a, b) => (b.mistakesHistory[b.mistakesHistory.length - 1]?.value || 0) - (a.mistakesHistory[a.mistakesHistory.length - 1]?.value || 0))
+          .slice(0, 3)
+          .forEach(s => focusSectionNames.add(s.name));
+      }
+    } else if (type === 'catchup') {
+      sectionStats.slice(0, 3).forEach(s => focusSectionNames.add(s.name));
+    }
+
+    if (focusSectionNames.size === 0) {
+      libSections.slice(0, 3).forEach(s => focusSectionNames.add(s.name));
+    }
+
+    const focusSections = [];
+    focusSectionNames.forEach(name => {
+      const stat = sectionStats.find(s => s.name === name);
+      const libSec = libSections.find(s => s.name === name);
+      const latestBpm = stat && stat.bpmHistory.length ? stat.bpmHistory[stat.bpmHistory.length - 1].value : suggestedBpm;
+      const latestMistakes = stat && stat.mistakesHistory.length ? stat.mistakesHistory[stat.mistakesHistory.length - 1].value : 0;
+      const latestMastery = stat ? stat.latestMastery : 3;
+      focusSections.push({
+        name,
+        bpm: suggestedBpm || latestBpm,
+        suggestedBpm: suggestedBpm || latestBpm,
+        mistakes: latestMistakes,
+        mastery: latestMastery,
+        note: libSec?.note || (stat ? `该片段最近练习 ${stat.practiceCount} 次` : ''),
+        focusReason: stat ? (
+          type === 'spike' ? '错误升高' :
+          type === 'slowdown' ? '基础薄弱' :
+          type === 'catchup' ? '需要复习' :
+          '需要巩固'
+        ) : '重点关注',
+        isFromLibrary: !stat
+      });
+    });
+
+    let estimatedMinutes = 30;
+    if (type === 'speedup') {
+      estimatedMinutes = Math.max(30, Math.min(60, 30 + focusSections.length * 10));
+    } else if (type === 'slowdown') {
+      estimatedMinutes = Math.max(35, Math.min(75, 40 + focusSections.length * 12));
+    } else if (type === 'spike') {
+      estimatedMinutes = Math.max(40, Math.min(90, 45 + focusSections.length * 15));
+    } else if (type === 'catchup') {
+      estimatedMinutes = Math.max(30, Math.min(60, 35 + focusSections.length * 10));
+    }
+
+    const goal = typeof goals !== 'undefined' ? goals.find(g => g.piece === track.piece && !g.achieved) : null;
+    const targetBpm = goal ? goal.targetBpm : (suggestedBpm || track.maxBpm);
+
+    return {
+      suggestedBpm: suggestedBpm || track.maxBpm,
+      targetBpm,
+      estimatedMinutes,
+      focusSections,
+      hasGoal: !!goal,
+      goalId: goal?.id || null
+    };
+  }
+
   function shouldSpeedUp(track, bpmAnalysis, mistakeAnalysis) {
     if (track.records.length < MIN_RECORDS_FOR_TREND) return null;
     const recentRecords = track.records.slice(-3);
@@ -6276,6 +6438,7 @@ const SuggestionEngine = (() => {
           bpmGain: latestBpm - track.records[0].bpm,
           suggestedBpm: suggestBpm
         },
+        planInfo: buildPlanInfo(track, 'speedup', suggestBpm),
         priority: 1
       };
     }
@@ -6307,6 +6470,7 @@ const SuggestionEngine = (() => {
           safeBpm: conservativeBpm,
           mistakeDelta: latest.mistakes - Math.round(avgMistakesPrev)
         },
+        planInfo: buildPlanInfo(track, 'slowdown', conservativeBpm),
         priority: 2
       };
     }
@@ -6334,6 +6498,7 @@ const SuggestionEngine = (() => {
           maxBpm: track.maxBpm,
           warmupBpm
         },
+        planInfo: buildPlanInfo(track, 'catchup', warmupBpm),
         priority: daysSince >= 21 ? 0 : 3
       };
     }
@@ -6362,6 +6527,7 @@ const SuggestionEngine = (() => {
           spikeRatio: mistakeAnalysis.spikeRatio,
           suggestedBpm
         },
+        planInfo: buildPlanInfo(track, 'spike', suggestedBpm),
         priority: 0
       };
     }
@@ -6447,6 +6613,301 @@ const SuggestionEngine = (() => {
 
   return { generateSuggestions, classifyPieceType };
 })();
+
+const PlanGenerator = (() => {
+  function findTodayPlanTaskByPiece(piece) {
+    const today = getToday();
+    return planTasks.filter(t => t.piece === piece && t.date === today);
+  }
+
+  function createTaskFromSuggestion(suggestion) {
+    const planInfo = suggestion.planInfo;
+    if (!planInfo) return null;
+
+    const libItem = LibraryManager.getByName(suggestion.piece);
+    const sections = [];
+
+    if (planInfo.focusSections && planInfo.focusSections.length) {
+      planInfo.focusSections.forEach(fs => {
+        sections.push({
+          id: crypto.randomUUID(),
+          name: fs.name,
+          bpm: Number(fs.suggestedBpm) || Number(planInfo.suggestedBpm),
+          mistakes: 0,
+          mastery: fs.mastery || 3,
+          note: fs.note || ''
+        });
+      });
+    } else if (libItem && libItem.defaultSections && libItem.defaultSections.length) {
+      libItem.defaultSections.forEach(s => {
+        sections.push({
+          id: crypto.randomUUID(),
+          name: s.name,
+          bpm: Number(planInfo.suggestedBpm),
+          mistakes: 0,
+          mastery: 3,
+          note: s.note || ''
+        });
+      });
+    }
+
+    const task = {
+      id: crypto.randomUUID(),
+      piece: suggestion.piece,
+      instrument: suggestion.instrument,
+      targetBpm: Number(planInfo.suggestedBpm),
+      estimatedMinutes: Number(planInfo.estimatedMinutes),
+      completed: false,
+      date: getToday(),
+      sections: sections,
+      fromSuggestion: true,
+      suggestionType: suggestion.type,
+      suggestionTitle: suggestion.title,
+      suggestionReason: suggestion.reason,
+      goalId: planInfo.goalId || null,
+      createdAt: new Date().toISOString()
+    };
+
+    return task;
+  }
+
+  function mergeTaskWithSuggestion(existingTask, suggestion) {
+    const planInfo = suggestion.planInfo;
+    if (!planInfo) return existingTask;
+
+    const mergedBpm = Math.max(Number(existingTask.targetBpm) || 0, Number(planInfo.suggestedBpm) || 0);
+    const mergedMinutes = Math.max(Number(existingTask.estimatedMinutes) || 0, Number(planInfo.estimatedMinutes) || 0);
+
+    const existingSectionNames = new Set((existingTask.sections || []).map(s => s.name));
+    const mergedSections = [...(existingTask.sections || [])];
+
+    if (planInfo.focusSections && planInfo.focusSections.length) {
+      planInfo.focusSections.forEach(fs => {
+        if (!existingSectionNames.has(fs.name)) {
+          mergedSections.push({
+            id: crypto.randomUUID(),
+            name: fs.name,
+            bpm: Number(fs.suggestedBpm) || Number(planInfo.suggestedBpm),
+            mistakes: 0,
+            mastery: fs.mastery || 3,
+            note: fs.note || ''
+          });
+        }
+      });
+    }
+
+    return {
+      ...existingTask,
+      targetBpm: mergedBpm,
+      estimatedMinutes: mergedMinutes,
+      sections: mergedSections,
+      fromSuggestion: true,
+      mergedFromSuggestion: true,
+      mergedSuggestionType: suggestion.type,
+      mergedAt: new Date().toISOString()
+    };
+  }
+
+  async function showConflictDialog(suggestion, existingTasks) {
+    const existingTask = existingTasks[0];
+    const typeLabels = {
+      speedup: '提速',
+      slowdown: '降速巩固',
+      catchup: '长期未练复习',
+      spike: '错误异常修正'
+    };
+    const suggestionLabel = typeLabels[suggestion.type] || suggestion.type;
+    const planInfo = suggestion.planInfo;
+
+    const html = `
+      <div class="conflictDialog" id="conflictDialog">
+        <div class="conflictDialogOverlay"></div>
+        <div class="conflictDialogContent">
+          <div class="conflictDialogHeader">
+            <h3>⚠️ 今日计划已存在同曲目任务</h3>
+            <p class="conflictDialogSub">「${escapeHtml(suggestion.piece)}」请选择处理方式</p>
+          </div>
+          <div class="conflictCompare">
+            <div class="conflictCompareCard">
+              <div class="conflictCompareTitle">📋 已有计划任务</div>
+              <div class="conflictCompareBpm">目标 BPM: <strong>${existingTask.targetBpm}</strong></div>
+              <div class="conflictCompareTime">预计时长: <strong>${existingTask.estimatedMinutes} 分钟</strong></div>
+              <div class="conflictCompareSections">
+                ${(existingTask.sections && existingTask.sections.length)
+                  ? `<span class="conflictCompareSub">包含 ${existingTask.sections.length} 个片段</span>`
+                  : '<span class="conflictCompareSub">暂无分段设置</span>'}
+                ${existingTask.fromSuggestion ? `<span class="conflictCompareBadge">来自建议</span>` : ''}
+                ${existingTask.completed ? `<span class="conflictCompareBadge done">已完成</span>` : ''}
+              </div>
+            </div>
+            <div class="conflictCompareArrow">→</div>
+            <div class="conflictCompareCard">
+              <div class="conflictCompareTitle">🎯 新建议 (${escapeHtml(suggestionLabel)})</div>
+              <div class="conflictCompareBpm">建议 BPM: <strong>${planInfo.suggestedBpm}</strong></div>
+              <div class="conflictCompareTime">预计时长: <strong>${planInfo.estimatedMinutes} 分钟</strong></div>
+              <div class="conflictCompareSections">
+                ${(planInfo.focusSections && planInfo.focusSections.length)
+                  ? `<span class="conflictCompareSub">${planInfo.focusSections.length} 个重点片段</span>`
+                  : ''}
+                ${planInfo.hasGoal ? `<span class="conflictCompareBadge goal">关联目标</span>` : ''}
+              </div>
+            </div>
+          </div>
+          <div class="conflictDialogActions">
+            <button class="primary" id="conflictMergeBtn">🔗 合并更新</button>
+            <button class="secondary" id="conflictSkipBtn">⏭️ 跳过本次</button>
+            <button class="secondary" id="conflictDuplicateBtn">📋 新增副本</button>
+          </div>
+          <div class="conflictDialogHints">
+            <div><strong>合并</strong>：取BPM和时长较大值，合并新的重点片段到已有任务</div>
+            <div><strong>跳过</strong>：保留现有计划，不添加新建议</div>
+            <div><strong>新增副本</strong>：在今日计划中创建第二个同名任务（分别处理）</div>
+          </div>
+        </div>
+      </div>
+    `;
+
+    document.body.insertAdjacentHTML('beforeend', html);
+    const dialog = document.querySelector('#conflictDialog');
+
+    return new Promise((resolve) => {
+      const removeDialog = () => dialog.remove();
+
+      dialog.querySelector('#conflictMergeBtn').onclick = () => {
+        removeDialog();
+        resolve('merge');
+      };
+      dialog.querySelector('#conflictSkipBtn').onclick = () => {
+        removeDialog();
+        resolve('skip');
+      };
+      dialog.querySelector('#conflictDuplicateBtn').onclick = () => {
+        removeDialog();
+        resolve('duplicate');
+      };
+      dialog.querySelector('.conflictDialogOverlay').onclick = () => {
+        removeDialog();
+        resolve('skip');
+      };
+    });
+  }
+
+  async function handleSuggestionToPlan(suggestion) {
+    const existingTasks = findTodayPlanTaskByPiece(suggestion.piece);
+
+    if (existingTasks.length > 0) {
+      const action = await showConflictDialog(suggestion, existingTasks);
+
+      if (action === 'skip') {
+        return { success: false, skipped: true };
+      }
+
+      if (action === 'merge') {
+        const existingTask = existingTasks[0];
+        const merged = mergeTaskWithSuggestion(existingTask, suggestion);
+        planTasks = planTasks.map(t => t.id === existingTask.id ? merged : t);
+        savePlan(planTasks);
+        refreshAllRelatedViews();
+        return { success: true, merged: true, taskId: existingTask.id };
+      }
+
+      if (action === 'duplicate') {
+        const newTask = createTaskFromSuggestion(suggestion);
+        if (newTask) {
+          newTask.isDuplicate = true;
+          planTasks.push(newTask);
+          savePlan(planTasks);
+          refreshAllRelatedViews();
+          return { success: true, created: true, taskId: newTask.id, duplicated: true };
+        }
+      }
+
+      return { success: false };
+    }
+
+    const newTask = createTaskFromSuggestion(suggestion);
+    if (newTask) {
+      planTasks.push(newTask);
+      savePlan(planTasks);
+      refreshAllRelatedViews();
+      return { success: true, created: true, taskId: newTask.id };
+    }
+
+    return { success: false };
+  }
+
+  async function batchGenerateAllPlans() {
+    const result = SuggestionEngine.generateSuggestions();
+    const suggestions = result.suggestions.filter(s => s.planInfo);
+
+    if (suggestions.length === 0) {
+      alert('暂无可以生成计划的建议');
+      return;
+    }
+
+    let created = 0;
+    let merged = 0;
+    let skipped = 0;
+    let duplicates = 0;
+
+    for (const suggestion of suggestions) {
+      const existingTasks = findTodayPlanTaskByPiece(suggestion.piece);
+
+      if (existingTasks.length > 0) {
+        const existingTask = existingTasks[0];
+        const mergedTask = mergeTaskWithSuggestion(existingTask, suggestion);
+        planTasks = planTasks.map(t => t.id === existingTask.id ? mergedTask : t);
+        merged++;
+      } else {
+        const newTask = createTaskFromSuggestion(suggestion);
+        if (newTask) {
+          planTasks.push(newTask);
+          created++;
+        }
+      }
+    }
+
+    savePlan(planTasks);
+    refreshAllRelatedViews();
+
+    const summary = [
+      `✅ 批量生成完成！`,
+      created ? `🆕 新增任务: ${created} 个` : '',
+      merged ? `🔗 合并更新: ${merged} 个` : '',
+      skipped ? `⏭️ 跳过: ${skipped} 个` : '',
+      duplicates ? `📋 副本: ${duplicates} 个` : ''
+    ].filter(Boolean).join('  ·  ');
+
+    const totalInPlan = planTasks.filter(t => t.date === getToday()).length;
+    alert(`${summary}\n\n今日计划现有 ${totalInPlan} 个任务，记得合理安排练习时间哦！`);
+  }
+
+  function refreshAllRelatedViews() {
+    refreshLibrary();
+    render();
+    setTimeout(() => {
+      document.querySelector('.planPanel')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }, 80);
+  }
+
+  return {
+    findTodayPlanTaskByPiece,
+    createTaskFromSuggestion,
+    mergeTaskWithSuggestion,
+    showConflictDialog,
+    handleSuggestionToPlan,
+    batchGenerateAllPlans,
+    refreshAllRelatedViews
+  };
+})();
+
+function handleSuggestionToPlan(suggestion) {
+  return PlanGenerator.handleSuggestionToPlan(suggestion);
+}
+
+function batchGenerateAllPlans() {
+  return PlanGenerator.batchGenerateAllPlans();
+}
 
 function drawTrendLine(data, color) {
   if (!data.length) return '';
