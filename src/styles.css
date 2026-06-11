@@ -417,13 +417,6 @@ td button { margin-left: 6px; background: #dff3ef; }
   flex: 1;
   min-width: 0;
 }
-.taskPiece {
-  font-weight: 600;
-  font-size: 15px;
-  color: #172522;
-  margin-bottom: 4px;
-  word-break: break-word;
-}
 .taskMeta {
   display: flex;
   gap: 16px;
@@ -451,6 +444,46 @@ td button { margin-left: 6px; background: #dff3ef; }
 .taskDel:hover {
   background: #fee2e2;
   color: #dc2626;
+}
+.taskContent.clickable {
+  cursor: pointer;
+  border-radius: 6px;
+  padding: 2px 6px;
+  margin: -2px -6px;
+  transition: background 0.15s ease;
+}
+.taskContent.clickable:hover {
+  background: rgba(15, 118, 110, 0.06);
+}
+.taskPiece {
+  font-weight: 600;
+  font-size: 15px;
+  color: #172522;
+  margin-bottom: 4px;
+  word-break: break-word;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.taskRecordHint {
+  font-size: 12px;
+  font-weight: 500;
+  color: #0f766e;
+  background: rgba(15, 118, 110, 0.1);
+  padding: 2px 8px;
+  border-radius: 4px;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+.taskContent.clickable:hover .taskRecordHint {
+  opacity: 1;
+}
+.emptyHint {
+  text-align: center;
+  color: #0f766e;
+  font-size: 13px;
+  margin-top: 4px;
 }
 
 .muted {

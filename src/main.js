@@ -3671,10 +3671,62 @@ function renderLibrary() {
   }
 }
 
+function createRecordFromPlan(task) {
+  const pieceInfo = LibraryManager.resolvePieceInfo(task.piece);
+  
+  editingId = null;
+  currentSections = [];
+  
+  if (form.elements.instrument) {
+    form.elements.instrument.value = pieceInfo.instrument || '';
+  }
+  if (form.elements.piece) {
+    form.elements.piece.value = task.piece;
+  }
+  if (form.elements.date) {
+    form.elements.date.value = getToday();
+  }
+  if (form.elements.bpm) {
+    form.elements.bpm.value = task.targetBpm;
+  }
+  if (form.elements.minutes) {
+    form.elements.minutes.value = task.estimatedMinutes;
+  }
+  if (form.elements.mistakes) {
+    form.elements.mistakes.value = '';
+  }
+  if (form.elements.note) {
+    form.elements.note.value = '';
+  }
+  
+  if (task.sections && task.sections.length) {
+    currentSections = task.sections.map(s => ({
+      id: crypto.randomUUID(),
+      name: s.name,
+      bpm: Number(task.targetBpm),
+      mistakes: 0,
+      mastery: 3,
+      note: s.note || ''
+    }));
+  } else if (pieceInfo.defaultSections && pieceInfo.defaultSections.length) {
+    currentSections = pieceInfo.defaultSections.map(s => ({
+      id: crypto.randomUUID(),
+      name: s.name,
+      bpm: Number(task.targetBpm),
+      mistakes: 0,
+      mastery: 3,
+      note: s.note || ''
+    }));
+  }
+  
+  renderSections();
+  form.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
 function renderPlan() {
   const listEl = document.querySelector('#planList');
   if (!planTasks.length) {
-    listEl.innerHTML = '<p class="empty">暂无今日练习计划，点击上方添加任务</p>';
+    listEl.innerHTML = '<p class="empty">暂无今日练习计划，点击上方添加任务</p><p class="emptyHint">💡 点击任务可快速生成练习记录</p>';
     return;
   }
   listEl.innerHTML = planTasks.map((task) => `
@@ -3683,8 +3735,11 @@ function renderPlan() {
         <input type="checkbox" ${task.completed ? 'checked' : ''} data-toggle="${task.id}" />
         <span class="checkmark"></span>
       </label>
-      <div class="taskContent">
-        <div class="taskPiece">${escapeHtml(task.piece)}</div>
+      <div class="taskContent clickable" data-plan-record="${task.id}" title="点击生成练习记录">
+        <div class="taskPiece">
+          ${escapeHtml(task.piece)}
+          <span class="taskRecordHint">📝 生成记录</span>
+        </div>
         <div class="taskMeta">
           <span>目标 BPM: <strong>${task.targetBpm}</strong></span>
           <span>预计: <strong>${task.estimatedMinutes}min</strong></span>
@@ -3705,6 +3760,13 @@ function renderPlan() {
     );
     savePlan(planTasks);
     render();
+  }));
+  document.querySelectorAll('[data-plan-record]').forEach((content) => content.addEventListener('click', () => {
+    const taskId = content.dataset.planRecord;
+    const task = planTasks.find((t) => t.id === taskId);
+    if (task) {
+      createRecordFromPlan(task);
+    }
   }));
   document.querySelectorAll('[data-plan-del]').forEach((button) => button.addEventListener('click', () => {
     planTasks = planTasks.filter((task) => task.id !== button.dataset.planDel);
