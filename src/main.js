@@ -809,6 +809,21 @@ function endSession() {
   committedSessionIds.push(session.id);
   saveCommittedSessions();
 
+  const achievedGoals = [];
+  goals = goals.map((goal) => {
+    if (!goal.achieved && goal.piece === session.piece && session.targetBpm && session.targetBpm >= goal.targetBpm) {
+      achievedGoals.push(goal.piece);
+      return { ...goal, achieved: true, achievedAt: getToday(), autoAchieved: true };
+    }
+    return goal;
+  });
+  if (achievedGoals.length > 0) {
+    saveGoals(goals);
+    setTimeout(() => {
+      alert(`🎉 恭喜！${achievedGoals.join('、')} 已达到目标 BPM，目标状态已自动更新为已达成！`);
+    }, 100);
+  }
+
   session = {
     id: null,
     status: 'idle',
@@ -1475,6 +1490,7 @@ document.querySelector('#app').innerHTML = `
         </div>
         <button class="primary">添加任务</button>
       </form>
+      <div id="planSuggestions" class="planSuggestions" style="display:none;"></div>
       <div id="planList" class="planList"></div>
     </section>
 
@@ -4484,8 +4500,125 @@ function createRecordFromPlan(task) {
   form.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
+function generateGoalSuggestions() {
+  const suggestions = [];
+  const activeGoals = goals.filter(g => !g.achieved);
+
+  activeGoals.forEach((goal) => {
+    const progress = calculateGoalProgress(goal);
+    const reasons = [];
+
+    if (progress.isOverdue) {
+      reasons.push(`已逾期 ${Math.abs(progress.daysRemaining)} 天`);
+    } else if (progress.daysRemaining <= 3) {
+      reasons.push(`临近截止（剩余 ${progress.daysRemaining} 天）`);
+    }
+
+    if (progress.weeklyProgress < 60) {
+      const shortfall = goal.weeklyMinutes - progress.weekMinutes;
+      if (shortfall > 0) {
+        reasons.push(`本周练习时长还差 ${shortfall} 分钟`);
+      }
+    }
+
+    if (reasons.length > 0) {
+      const shortfallMinutes = Math.max(0, goal.weeklyMinutes - progress.weekMinutes);
+      const suggestedMinutes = Math.min(
+        Math.max(30, shortfallMinutes, Math.ceil((goal.targetBpm - progress.currentBpm) / 2) * 10),
+        120
+      );
+      const existingTask = planTasks.find(t => t.piece === goal.piece && !t.completed);
+      suggestions.push({
+        goalId: goal.id,
+        piece: goal.piece,
+        targetBpm: goal.targetBpm,
+        currentBpm: progress.currentBpm,
+        reasons: reasons,
+        suggestedMinutes: suggestedMinutes,
+        alreadyInPlan: !!existingTask
+      });
+    }
+  });
+
+  return suggestions.sort((a, b) => {
+    if (a.alreadyInPlan !== b.alreadyInPlan) return a.alreadyInPlan ? 1 : -1;
+    const progressA = calculateGoalProgress(goals.find(g => g.id === a.goalId));
+    const progressB = calculateGoalProgress(goals.find(g => g.id === b.goalId));
+    if (progressA.isOverdue !== progressB.isOverdue) return progressA.isOverdue ? -1 : 1;
+    return progressA.daysRemaining - progressB.daysRemaining;
+  });
+}
+
+function addSuggestionToPlan(suggestion) {
+  const libItem = LibraryManager.getByName(suggestion.piece);
+  let sections = [];
+  if (libItem && libItem.defaultSections && libItem.defaultSections.length) {
+    sections = libItem.defaultSections.map(s => ({
+      id: crypto.randomUUID(),
+      name: s.name,
+      bpm: Number(suggestion.targetBpm),
+      mistakes: 0,
+      mastery: 3,
+      note: s.note || ''
+    }));
+  }
+  const task = {
+    id: crypto.randomUUID(),
+    piece: suggestion.piece,
+    targetBpm: Number(suggestion.targetBpm),
+    estimatedMinutes: Number(suggestion.suggestedMinutes),
+    completed: false,
+    date: getToday(),
+    sections: sections,
+    fromSuggestion: true
+  };
+  planTasks.push(task);
+  savePlan(planTasks);
+  render();
+}
+
 function renderPlan() {
   const listEl = document.querySelector('#planList');
+  const suggestionEl = document.querySelector('#planSuggestions');
+  const suggestions = generateGoalSuggestions();
+
+  if (suggestions.length > 0 && suggestionEl) {
+    suggestionEl.style.display = 'block';
+    suggestionEl.innerHTML = `
+      <div class="suggestionTitle">🎯 目标补练建议</div>
+      <div class="suggestionList">
+        ${suggestions.map((s) => `
+          <div class="suggestionCard ${s.alreadyInPlan ? 'in-plan' : ''}">
+            <div class="suggestionCardHead">
+              <strong>${escapeHtml(s.piece)}</strong>
+              <span class="suggestionBpm">当前 ${s.currentBpm} → 目标 ${s.targetBpm} BPM</span>
+            </div>
+            <div class="suggestionReasons">
+              ${s.reasons.map(r => `<span class="suggestionReason">⚠ ${escapeHtml(r)}</span>`).join('')}
+            </div>
+            <div class="suggestionAction">
+              <span class="suggestionMinutes">建议练习 ${s.suggestedMinutes} 分钟</span>
+              ${s.alreadyInPlan
+                ? '<span class="inPlanBadge">已在计划中</span>'
+                : `<button class="primary small addSuggestionBtn" data-suggestion="${s.goalId}">➕ 添加到今日计划</button>`
+              }
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    `;
+    suggestionEl.querySelectorAll('[data-suggestion]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const goalId = btn.dataset.suggestion;
+        const suggestion = suggestions.find(s => s.goalId === goalId);
+        if (suggestion) addSuggestionToPlan(suggestion);
+      });
+    });
+  } else if (suggestionEl) {
+    suggestionEl.style.display = 'none';
+    suggestionEl.innerHTML = '';
+  }
+
   if (!planTasks.length) {
     listEl.innerHTML = '<p class="empty">暂无今日练习计划，点击上方添加任务</p><p class="emptyHint">💡 点击任务可快速生成练习记录</p>';
     return;
@@ -4599,7 +4732,7 @@ function renderGoals() {
           <div class="progressBar"><div class="progressFill time" style="width: ${progress.timeProgress}%"></div></div>
         </div>
         <div class="goalActions">
-          ${!progress.isAchieved ? `<button class="goalAchieve" data-goal-achieve="${goal.id}">标记达成</button>` : ''}
+          ${progress.isAchieved ? `<button class="goalUnachieve" data-goal-unachieve="${goal.id}">撤销达成</button>` : `<button class="goalAchieve" data-goal-achieve="${goal.id}">标记达成</button>`}
           <button class="goalDel" data-goal-del="${goal.id}" aria-label="删除">删除</button>
         </div>
       </div>
@@ -4607,7 +4740,17 @@ function renderGoals() {
   }).join('');
   document.querySelectorAll('[data-goal-achieve]').forEach((button) => button.addEventListener('click', () => {
     const goalId = button.dataset.goalAchieve;
-    goals = goals.map((g) => g.id === goalId ? { ...g, achieved: true, achievedAt: getToday() } : g);
+    goals = goals.map((g) => g.id === goalId ? { ...g, achieved: true, achievedAt: getToday(), autoAchieved: false } : g);
+    saveGoals(goals);
+    render();
+  }));
+  document.querySelectorAll('[data-goal-unachieve]').forEach((button) => button.addEventListener('click', async () => {
+    const goalId = button.dataset.goalUnachieve;
+    const goal = goals.find((g) => g.id === goalId);
+    if (!goal) return;
+    const confirmed = await showConfirm('撤销达成', `确定要撤销「${goal.piece}」的达成状态吗？`);
+    if (!confirmed) return;
+    goals = goals.map((g) => g.id === goalId ? { ...g, achieved: false, achievedAt: null, autoAchieved: false } : g);
     saveGoals(goals);
     render();
   }));
