@@ -1275,11 +1275,41 @@ document.querySelector('#app').innerHTML = `
       </div>
     </header>
 
+    <div id="exportModal" class="modal" hidden>
+      <div class="modalOverlay"></div>
+      <div class="modalContent">
+        <div class="modalHead">
+          <h2>导出数据</h2>
+          <button class="modalClose" id="exportModalClose">×</button>
+        </div>
+        <div class="modalBody">
+          <div class="exportOptions">
+            <div class="exportOption">
+              <div class="exportOptionIcon">📝</div>
+              <div class="exportOptionContent">
+                <h3>仅导出练习记录</h3>
+                <p class="muted">只包含练习记录数据，文件体积小，便于分享和迁移记录。</p>
+              </div>
+              <button class="primary" id="exportRecordsBtn">导出记录</button>
+            </div>
+            <div class="exportOption highlighted">
+              <div class="exportOptionIcon">💾</div>
+              <div class="exportOptionContent">
+                <h3>完整备份（推荐）</h3>
+                <p class="muted">包含练习记录、曲目资料库、练习目标、筛选视图和今日计划，完整备份所有本地数据。</p>
+              </div>
+              <button class="primary" id="exportFullBtn">完整备份</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <div id="importModal" class="modal" hidden>
       <div class="modalOverlay"></div>
       <div class="modalContent">
         <div class="modalHead">
-          <h2>导入练习记录</h2>
+          <h2 id="importModalTitle">导入练习记录</h2>
           <button class="modalClose" id="modalClose">×</button>
         </div>
         <div class="modalBody">
@@ -1748,6 +1778,7 @@ document.querySelector('#sample').addEventListener('click', async () => {
 });
 
 let pendingImportData = null;
+let pendingImportType = 'records';
 
 const exportBtn = document.querySelector('#exportBtn');
 const importBtn = document.querySelector('#importBtn');
@@ -1757,22 +1788,61 @@ const importPreview = document.querySelector('#importPreview');
 const modalClose = document.querySelector('#modalClose');
 const modalCancel = document.querySelector('#modalCancel');
 const modalConfirm = document.querySelector('#modalConfirm');
+const importModalTitle = document.querySelector('#importModalTitle');
 
-function exportData() {
-  const data = {
-    exportedAt: new Date().toISOString(),
-    version: '1.0',
-    records: records
-  };
+const exportModal = document.querySelector('#exportModal');
+const exportModalClose = document.querySelector('#exportModalClose');
+const exportRecordsBtn = document.querySelector('#exportRecordsBtn');
+const exportFullBtn = document.querySelector('#exportFullBtn');
+
+function downloadJson(data, filename) {
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `music-practice-${getToday()}.json`;
+  a.download = filename;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
+}
+
+function exportRecordsOnly() {
+  const data = {
+    type: 'records-only',
+    exportedAt: new Date().toISOString(),
+    version: '1.0',
+    records: records
+  };
+  downloadJson(data, `music-practice-${getToday()}.json`);
+}
+
+function exportFullBackup() {
+  const allPlanData = JSON.parse(localStorage.getItem(planKey) || 'null') || {};
+
+  const data = {
+    type: 'full-backup',
+    exportedAt: new Date().toISOString(),
+    version: '2.0',
+    records: records,
+    library: LibraryManager.getAll(),
+    goals: goals,
+    views: views,
+    plan: allPlanData
+  };
+  downloadJson(data, `music-practice-full-backup-${getToday()}.json`);
+}
+
+function openExportModal() {
+  exportModal.hidden = false;
+}
+
+function closeExportModal() {
+  exportModal.hidden = true;
+}
+
+function exportData() {
+  exportRecordsOnly();
 }
 
 function validateSection(section, recordIndex, sectionIndex) {
@@ -2096,6 +2166,178 @@ function renderImportPreview(result) {
   updateImportConfirmState();
 }
 
+function processFullBackupData(parsedData) {
+  const result = {
+    type: 'full-backup',
+    records: null,
+    library: { items: [], newItems: [], existingItems: [] },
+    goals: { items: [], newItems: [], existingItems: [] },
+    views: { items: [], newItems: [], existingItems: [] },
+    plan: { dates: {}, totalTasks: 0, newTasks: 0, existingTasks: 0 }
+  };
+
+  if (parsedData.records && Array.isArray(parsedData.records)) {
+    result.records = processImportData(parsedData.records);
+  } else {
+    result.records = { validRecords: [], newRecords: [], duplicateRecords: [], invalidRecords: [], allErrors: [] };
+  }
+
+  if (parsedData.library && Array.isArray(parsedData.library)) {
+    result.library.items = parsedData.library;
+    const existingNames = new Set(library.map(item => item.name));
+    parsedData.library.forEach(item => {
+      if (existingNames.has(item.name)) {
+        result.library.existingItems.push(item);
+      } else {
+        result.library.newItems.push(item);
+      }
+    });
+  }
+
+  if (parsedData.goals && Array.isArray(parsedData.goals)) {
+    result.goals.items = parsedData.goals;
+    const existingKeys = new Set(goals.map(g => `${g.piece}-${g.targetBpm}`));
+    parsedData.goals.forEach(goal => {
+      const key = `${goal.piece}-${goal.targetBpm}`;
+      if (existingKeys.has(key)) {
+        result.goals.existingItems.push(goal);
+      } else {
+        result.goals.newItems.push(goal);
+      }
+    });
+  }
+
+  if (parsedData.views && Array.isArray(parsedData.views)) {
+    result.views.items = parsedData.views;
+    const existingNames = new Set(views.map(v => v.name));
+    parsedData.views.forEach(view => {
+      if (existingNames.has(view.name)) {
+        result.views.existingItems.push(view);
+      } else {
+        result.views.newItems.push(view);
+      }
+    });
+  }
+
+  if (parsedData.plan && typeof parsedData.plan === 'object') {
+    result.plan.dates = parsedData.plan;
+    const existingPlanData = JSON.parse(localStorage.getItem(planKey) || 'null') || {};
+    for (const date in parsedData.plan) {
+      const tasks = parsedData.plan[date];
+      if (Array.isArray(tasks)) {
+        result.plan.totalTasks += tasks.length;
+        const existingTasks = existingPlanData[date] || [];
+        const existingTaskKeys = new Set(existingTasks.map(t => `${t.piece}-${t.targetBpm}-${t.estimatedMinutes}`));
+        tasks.forEach(task => {
+          const key = `${task.piece}-${task.targetBpm}-${task.estimatedMinutes}`;
+          if (existingTaskKeys.has(key)) {
+            result.plan.existingTasks++;
+          } else {
+            result.plan.newTasks++;
+          }
+        });
+      }
+    }
+  }
+
+  return result;
+}
+
+function renderFullBackupPreview(result) {
+  const { records, library, goals, views, plan } = result;
+
+  let html = '';
+
+  html += `
+    <span class="backupTypeBadge full">💾 完整备份</span>
+    <div class="backupSummary">
+      <div class="backupSummaryItem">
+        <span class="backupCount">${records.validRecords.length}</span>
+        <span class="backupLabel">有效记录</span>
+      </div>
+      <div class="backupSummaryItem">
+        <span class="backupCount">${library.items.length}</span>
+        <span class="backupLabel">曲目资料</span>
+      </div>
+      <div class="backupSummaryItem">
+        <span class="backupCount">${goals.items.length}</span>
+        <span class="backupLabel">练习目标</span>
+      </div>
+      <div class="backupSummaryItem">
+        <span class="backupCount">${views.items.length}</span>
+        <span class="backupLabel">筛选视图</span>
+      </div>
+      <div class="backupSummaryItem">
+        <span class="backupCount">${Object.keys(plan.dates).length}</span>
+        <span class="backupLabel">计划天数</span>
+      </div>
+    </div>
+  `;
+
+  html += `
+    <div class="importModeSection">
+      <h3>导入模式</h3>
+      <label class="importModeOption">
+        <input type="radio" name="importMode" value="merge" checked />
+        <div>
+          <strong>合并导入</strong>
+          <span class="muted">将新数据合并到现有数据中，已有数据保持不变（推荐）</span>
+        </div>
+      </label>
+      <label class="importModeOption">
+        <input type="radio" name="importMode" value="overwrite" />
+        <div>
+          <strong>覆盖导入</strong>
+          <span class="muted">清除所有现有数据，仅保留导入的数据。此操作可通过历史版本回滚。</span>
+        </div>
+      </label>
+    </div>
+  `;
+
+  html += `
+    <div class="backupImportSection">
+      <h3>📊 数据明细</h3>
+      <div class="backupImportItem">
+        <span class="backupImportItemName">练习记录（有效/新增/重复/错误）</span>
+        <span class="backupImportItemCount">${records.validRecords.length} / ${records.newRecords.length} / ${records.duplicateRecords.length} / ${records.invalidRecords.length}</span>
+      </div>
+      <div class="backupImportItem">
+        <span class="backupImportItemName">曲目资料库（总数/新增/已有）</span>
+        <span class="backupImportItemCount">${library.items.length} / ${library.newItems.length} / ${library.existingItems.length}</span>
+      </div>
+      <div class="backupImportItem">
+        <span class="backupImportItemName">练习目标（总数/新增/已有）</span>
+        <span class="backupImportItemCount">${goals.items.length} / ${goals.newItems.length} / ${goals.existingItems.length}</span>
+      </div>
+      <div class="backupImportItem">
+        <span class="backupImportItemName">筛选视图（总数/新增/已有）</span>
+        <span class="backupImportItemCount">${views.items.length} / ${views.newItems.length} / ${views.existingItems.length}</span>
+      </div>
+      <div class="backupImportItem">
+        <span class="backupImportItemName">今日计划（总任务数/新增/已有）</span>
+        <span class="backupImportItemCount">${plan.totalTasks} / ${plan.newTasks} / ${plan.existingTasks}</span>
+      </div>
+    </div>
+  `;
+
+  if (records.allErrors.length > 0) {
+    html += `
+      <div class="importSection errors">
+        <h3>❌ 记录格式错误 (${records.invalidRecords.length})</h3>
+        <ul class="errorList">
+          ${records.allErrors.map(e => `<li>${escapeHtml(e)}</li>`).join('')}
+        </ul>
+      </div>
+    `;
+  }
+
+  importPreview.innerHTML = html;
+  importPreview.querySelectorAll('input[name="importMode"]').forEach((radio) => {
+    radio.addEventListener('change', updateImportConfirmState);
+  });
+  updateImportConfirmState();
+}
+
 function getSelectedImportMode() {
   const modeEl = importPreview.querySelector('input[name="importMode"]:checked');
   return modeEl ? modeEl.value : 'merge';
@@ -2109,17 +2351,34 @@ function updateImportConfirmState() {
   }
 
   const mode = getSelectedImportMode();
-  const importCount = mode === 'overwrite'
-    ? pendingImportData.validRecords.length
-    : pendingImportData.newRecords.length;
 
-  modalConfirm.disabled = importCount === 0;
-  if (importCount === 0) {
-    modalConfirm.textContent = mode === 'overwrite' ? '无有效数据可覆盖' : '无新增数据可导入';
+  if (pendingImportType === 'full-backup') {
+    const { records, library, goals, views, plan } = pendingImportData;
+    const hasData = mode === 'overwrite'
+      ? (records.validRecords.length > 0 || library.items.length > 0 || goals.items.length > 0 || views.items.length > 0 || Object.keys(plan.dates).length > 0)
+      : (records.newRecords.length > 0 || library.newItems.length > 0 || goals.newItems.length > 0 || views.newItems.length > 0 || plan.newTasks > 0);
+
+    modalConfirm.disabled = !hasData;
+    if (!hasData) {
+      modalConfirm.textContent = mode === 'overwrite' ? '无有效数据可覆盖' : '无新增数据可导入';
+    } else {
+      modalConfirm.textContent = mode === 'overwrite'
+        ? '确认覆盖导入全部数据'
+        : '确认合并导入新增数据';
+    }
   } else {
-    modalConfirm.textContent = mode === 'overwrite'
-      ? `确认覆盖导入 ${importCount} 条记录`
-      : `确认导入 ${importCount} 条记录`;
+    const importCount = mode === 'overwrite'
+      ? pendingImportData.validRecords.length
+      : pendingImportData.newRecords.length;
+
+    modalConfirm.disabled = importCount === 0;
+    if (importCount === 0) {
+      modalConfirm.textContent = mode === 'overwrite' ? '无有效数据可覆盖' : '无新增数据可导入';
+    } else {
+      modalConfirm.textContent = mode === 'overwrite'
+        ? `确认覆盖导入 ${importCount} 条记录`
+        : `确认导入 ${importCount} 条记录`;
+    }
   }
 }
 
@@ -2137,11 +2396,13 @@ function showImportError(message) {
 function openImportModal() {
   importFile.value = '';
   pendingImportData = null;
+  pendingImportType = 'records';
+  importModalTitle.textContent = '导入数据';
   importPreview.innerHTML = `
     <div class="importSelect">
       <p>请选择要导入的 JSON 文件</p>
       <button class="primary" id="selectFileBtn">选择文件</button>
-      <p class="muted">支持导出的 JSON 文件格式</p>
+      <p class="muted">支持练习记录文件和完整备份文件</p>
     </div>
   `;
   modalConfirm.disabled = true;
@@ -2159,9 +2420,20 @@ function openImportModal() {
 function closeImportModal() {
   importModal.hidden = true;
   pendingImportData = null;
+  pendingImportType = 'records';
 }
 
-exportBtn.addEventListener('click', exportData);
+exportBtn.addEventListener('click', openExportModal);
+exportModalClose.addEventListener('click', closeExportModal);
+exportModal.querySelector('.modalOverlay').addEventListener('click', closeExportModal);
+exportRecordsBtn.addEventListener('click', () => {
+  exportRecordsOnly();
+  closeExportModal();
+});
+exportFullBtn.addEventListener('click', () => {
+  exportFullBackup();
+  closeExportModal();
+});
 importBtn.addEventListener('click', openImportModal);
 modalClose.addEventListener('click', closeImportModal);
 modalCancel.addEventListener('click', closeImportModal);
@@ -2173,9 +2445,20 @@ importFile.addEventListener('change', async (e) => {
 
   try {
     const parsed = await parseImportFile(file);
-    const result = processImportData(parsed);
-    pendingImportData = result;
-    renderImportPreview(result);
+
+    if (parsed && parsed.type === 'full-backup') {
+      pendingImportType = 'full-backup';
+      importModalTitle.textContent = '导入完整备份';
+      const result = processFullBackupData(parsed);
+      pendingImportData = result;
+      renderFullBackupPreview(result);
+    } else {
+      pendingImportType = 'records';
+      importModalTitle.textContent = '导入练习记录';
+      const result = processImportData(parsed);
+      pendingImportData = result;
+      renderImportPreview(result);
+    }
   } catch (err) {
     showImportError(err.message);
   }
@@ -2185,36 +2468,154 @@ modalConfirm.addEventListener('click', async () => {
   if (!pendingImportData) return;
 
   const mode = getSelectedImportMode();
-  const newRecords = pendingImportData.newRecords.map(item => item.record);
-  const validRecords = pendingImportData.validRecords.map(item => item.record);
-  const recordsToImport = mode === 'overwrite' ? validRecords : newRecords;
-  if (recordsToImport.length === 0) return;
 
-  let finalRecords;
+  if (pendingImportType === 'full-backup') {
+    await handleFullBackupImport(mode);
+  } else {
+    const newRecords = pendingImportData.newRecords.map(item => item.record);
+    const validRecords = pendingImportData.validRecords.map(item => item.record);
+    const recordsToImport = mode === 'overwrite' ? validRecords : newRecords;
+    if (recordsToImport.length === 0) return;
+
+    let finalRecords;
+    if (mode === 'overwrite') {
+      const confirmed = await showConfirm(
+        '覆盖导入确认',
+        `确定要用导入的 ${recordsToImport.length} 条记录覆盖所有现有 ${records.length} 条记录吗？\n此操作可通过历史版本回滚。`
+      );
+      if (!confirmed) return;
+      finalRecords = recordsToImport;
+    } else {
+      finalRecords = [...recordsToImport, ...records];
+    }
+
+    const result = VersionManager.recordChange('import', finalRecords, {
+      count: recordsToImport.length,
+      mode,
+      ids: recordsToImport.map(r => r.id)
+    });
+    records = result.records;
+    render();
+    closeImportModal();
+
+    const count = recordsToImport.length;
+    const modeText = mode === 'overwrite' ? '（覆盖模式）' : '';
+    alert(`成功导入 ${count} 条练习记录${modeText}！`);
+  }
+});
+
+async function handleFullBackupImport(mode) {
+  const { records: recordData, library: libData, goals: goalsData, views: viewsData, plan: planData } = pendingImportData;
+
+  const newRecordCount = recordData.newRecords.length;
+  const validRecordCount = recordData.validRecords.length;
+  const recordCount = mode === 'overwrite' ? validRecordCount : newRecordCount;
+
+  const libCount = mode === 'overwrite' ? libData.items.length : libData.newItems.length;
+  const goalCount = mode === 'overwrite' ? goalsData.items.length : goalsData.newItems.length;
+  const viewCount = mode === 'overwrite' ? viewsData.items.length : viewsData.newItems.length;
+  const planTaskCount = mode === 'overwrite' ? planData.totalTasks : planData.newTasks;
+
+  if (recordCount === 0 && libCount === 0 && goalCount === 0 && viewCount === 0 && planTaskCount === 0) {
+    return;
+  }
+
   if (mode === 'overwrite') {
     const confirmed = await showConfirm(
       '覆盖导入确认',
-      `确定要用导入的 ${recordsToImport.length} 条记录覆盖所有现有 ${records.length} 条记录吗？\n此操作可通过历史版本回滚。`
+      `确定要用导入的数据覆盖所有现有数据吗？\n\n将覆盖：\n- ${validRecordCount} 条练习记录\n- ${libData.items.length} 条曲目资料\n- ${goalsData.items.length} 个练习目标\n- ${viewsData.items.length} 个筛选视图\n- ${Object.keys(planData.dates).length} 天的计划任务\n\n此操作可通过历史版本回滚。`
     );
     if (!confirmed) return;
-    finalRecords = recordsToImport;
-  } else {
-    finalRecords = [...recordsToImport, ...records];
   }
 
-  const result = VersionManager.recordChange('import', finalRecords, {
-    count: recordsToImport.length,
+  let finalRecords;
+  if (mode === 'overwrite') {
+    const newRecs = recordData.validRecords.map(item => item.record);
+    finalRecords = newRecs;
+  } else {
+    const newRecs = recordData.newRecords.map(item => item.record);
+    finalRecords = [...newRecs, ...records];
+  }
+
+  const versionResult = VersionManager.recordChange('import', finalRecords, {
+    count: recordCount,
     mode,
-    ids: recordsToImport.map(r => r.id)
+    type: 'full-backup'
   });
-  records = result.records;
+  records = versionResult.records;
+
+  if (mode === 'overwrite') {
+    if (libData.items.length > 0) {
+      localStorage.setItem(libraryKey, JSON.stringify(libData.items));
+      library = LibraryManager.getAll();
+    }
+    if (goalsData.items.length > 0) {
+      goals = goalsData.items;
+      saveGoals(goals);
+    }
+    if (viewsData.items.length > 0) {
+      views = viewsData.items;
+      saveViews();
+    }
+    if (Object.keys(planData.dates).length > 0) {
+      localStorage.setItem(planKey, JSON.stringify(planData.dates));
+      planTasks = loadPlan();
+    }
+  } else {
+    if (libData.newItems.length > 0) {
+      const currentLib = LibraryManager.getAll();
+      const newLibItems = libData.newItems.map(item => ({
+        ...item,
+        id: crypto.randomUUID(),
+        createdAt: item.createdAt || new Date().toISOString()
+      }));
+      const merged = [...currentLib, ...newLibItems];
+      localStorage.setItem(libraryKey, JSON.stringify(merged));
+      library = LibraryManager.getAll();
+    }
+    if (goalsData.newItems.length > 0) {
+      const newGoals = goalsData.newItems.map(goal => ({
+        ...goal,
+        id: crypto.randomUUID(),
+        createdAt: goal.createdAt || new Date().toISOString()
+      }));
+      goals = [...goals, ...newGoals];
+      saveGoals(goals);
+    }
+    if (viewsData.newItems.length > 0) {
+      const newViews = viewsData.newItems.map(view => ({
+        ...view,
+        id: crypto.randomUUID(),
+        createdAt: view.createdAt || new Date().toISOString(),
+        updatedAt: view.updatedAt || new Date().toISOString()
+      }));
+      views = [...views, ...newViews];
+      saveViews();
+    }
+    if (planData.newTasks > 0) {
+      const existingPlan = JSON.parse(localStorage.getItem(planKey) || 'null') || {};
+      for (const date in planData.dates) {
+        const tasks = planData.dates[date];
+        if (Array.isArray(tasks) && tasks.length > 0) {
+          const existingTasks = existingPlan[date] || [];
+          const existingKeys = new Set(existingTasks.map(t => `${t.piece}-${t.targetBpm}-${t.estimatedMinutes}`));
+          const newTasks = tasks
+            .filter(t => !existingKeys.has(`${t.piece}-${t.targetBpm}-${t.estimatedMinutes}`))
+            .map(t => ({ ...t, id: crypto.randomUUID() }));
+          existingPlan[date] = [...existingTasks, ...newTasks];
+        }
+      }
+      localStorage.setItem(planKey, JSON.stringify(existingPlan));
+      planTasks = loadPlan();
+    }
+  }
+
   render();
   closeImportModal();
 
-  const count = recordsToImport.length;
-  const modeText = mode === 'overwrite' ? '（覆盖模式）' : '';
-  alert(`成功导入 ${count} 条练习记录${modeText}！`);
-});
+  const modeText = mode === 'overwrite' ? '（覆盖模式）' : '（合并模式）';
+  alert(`成功导入完整备份${modeText}！\n\n- 练习记录: ${recordCount} 条\n- 曲目资料: ${libCount} 条\n- 练习目标: ${goalCount} 个\n- 筛选视图: ${viewCount} 个\n- 计划任务: ${planTaskCount} 条`);
+}
 
 function showPrompt(title, message, placeholder = '', defaultValue = '') {
   return new Promise((resolve) => {
