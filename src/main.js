@@ -2422,8 +2422,22 @@ function processFullBackupData(parsedData) {
 }
 
 function renderFullBackupPreview(result) {
-  const { records, library, goals, views, plan, hasRecords, hasLibrary, hasGoals, hasViews, hasPlan } = result;
+  const {
+    records: importRecords,
+    library: importLibrary,
+    goals: importGoals,
+    views: importViews,
+    plan: importPlan,
+    hasRecords, hasLibrary, hasGoals, hasViews, hasPlan
+  } = result;
   const cfg = pendingImportConfig;
+
+  const localPlanRaw = JSON.parse(localStorage.getItem(planKey) || 'null') || {};
+  const localRecordsCount = records.length;
+  const localLibraryCount = library.length;
+  const localGoalsCount = goals.length;
+  const localViewsCount = views.length;
+  const localPlanCount = Object.keys(localPlanRaw).length;
 
   let html = '';
 
@@ -2442,45 +2456,45 @@ function renderFullBackupPreview(result) {
       name: '练习记录',
       icon: '📝',
       hasData: hasRecords,
-      localCount: records.length,
-      backupCount: records.validRecords.length,
-      backupDesc: records.validRecords.length ? `${records.validRecords.length} 有效 / ${records.newRecords.length} 新增 / ${records.conflicts.length} 冲突 / ${records.invalidRecords.length} 错误` : '无数据'
+      localCount: localRecordsCount,
+      backupCount: importRecords.validRecords.length,
+      backupDesc: importRecords.validRecords.length ? `${importRecords.validRecords.length} 有效 / ${importRecords.newRecords.length} 新增 / ${importRecords.conflicts.length} 冲突 / ${importRecords.invalidRecords.length} 错误` : '无数据'
     },
     {
       key: 'library',
       name: '曲库',
       icon: '📚',
       hasData: hasLibrary,
-      localCount: library.length,
-      backupCount: library.items.length,
-      backupDesc: library.items.length ? `${library.items.length} 总计 / ${library.newItems.length} 新增 / ${library.conflicts.length} 冲突` : '无数据'
+      localCount: localLibraryCount,
+      backupCount: importLibrary.items.length,
+      backupDesc: importLibrary.items.length ? `${importLibrary.items.length} 总计 / ${importLibrary.newItems.length} 新增 / ${importLibrary.conflicts.length} 冲突` : '无数据'
     },
     {
       key: 'goals',
       name: '练习目标',
       icon: '🎯',
       hasData: hasGoals,
-      localCount: goals.length,
-      backupCount: goals.items.length,
-      backupDesc: goals.items.length ? `${goals.items.length} 总计 / ${goals.newItems.length} 新增 / ${goals.existingItems.length} 已有` : '无数据'
+      localCount: localGoalsCount,
+      backupCount: importGoals.items.length,
+      backupDesc: importGoals.items.length ? `${importGoals.items.length} 总计 / ${importGoals.newItems.length} 新增 / ${importGoals.existingItems.length} 已有` : '无数据'
     },
     {
       key: 'views',
       name: '筛选视图',
       icon: '👁',
       hasData: hasViews,
-      localCount: views.length,
-      backupCount: views.items.length,
-      backupDesc: views.items.length ? `${views.items.length} 总计 / ${views.newItems.length} 新增 / ${views.conflicts.length} 冲突` : '无数据'
+      localCount: localViewsCount,
+      backupCount: importViews.items.length,
+      backupDesc: importViews.items.length ? `${importViews.items.length} 总计 / ${importViews.newItems.length} 新增 / ${importViews.conflicts.length} 冲突` : '无数据'
     },
     {
       key: 'plan',
       name: '今日计划',
       icon: '📅',
       hasData: hasPlan,
-      localCount: Object.keys(JSON.parse(localStorage.getItem(planKey) || 'null') || {}).length,
-      backupCount: Object.keys(plan.dates).length,
-      backupDesc: plan.totalTasks ? `${Object.keys(plan.dates).length} 天 / ${plan.totalTasks} 任务 / ${plan.newTasks} 新增` : '无数据'
+      localCount: localPlanCount,
+      backupCount: Object.keys(importPlan.dates).length,
+      backupDesc: importPlan.totalTasks ? `${Object.keys(importPlan.dates).length} 天 / ${importPlan.totalTasks} 任务 / ${importPlan.newTasks} 新增` : '无数据'
     }
   ];
 
@@ -2505,7 +2519,7 @@ function renderFullBackupPreview(result) {
 
   html += `</div></div>`;
 
-  const totalConflicts = records.conflicts.length + library.conflicts.length + views.conflicts.length;
+  const totalConflicts = importRecords.conflicts.length + importLibrary.conflicts.length + importViews.conflicts.length;
   if (totalConflicts > 0) {
     html += `
       <div class="conflictSection">
@@ -2521,14 +2535,14 @@ function renderFullBackupPreview(result) {
         <p class="muted small">对于同名或重复的数据，选择如何处理：保留本地数据、用备份覆盖、或保存为副本</p>
     `;
 
-    if (records.conflicts.length > 0) {
+    if (importRecords.conflicts.length > 0) {
       html += `
         <div class="conflictGroup">
-          <div class="conflictGroupTitle">📝 练习记录冲突 (${records.conflicts.length})</div>
-          <div class="conflictGroupDesc muted small">同日期、同乐器、同曲目的练习记录</div>
+          <div class="conflictGroupTitle">📝 练习记录冲突 (${importRecords.conflicts.length})</div>
+          <div class="conflictGroupDesc muted small">同日期、同乐器、同曲目的练习记录。另存为副本会保留两次记录。</div>
           <div class="conflictList">
       `;
-      records.conflicts.forEach(c => {
+      importRecords.conflicts.forEach(c => {
         const br = c.backupRecord;
         const lr = c.localRecord;
         const action = cfg.conflicts.records[c.key].action;
@@ -2559,6 +2573,10 @@ function renderFullBackupPreview(result) {
                 <input type="radio" name="conflict_records_${escapeHtml(c.key)}" value="overwrite" ${action === 'overwrite' ? 'checked' : ''} />
                 <span>覆盖本地</span>
               </label>
+              <label class="conflictAction ${action === 'copy' ? 'active' : ''}">
+                <input type="radio" name="conflict_records_${escapeHtml(c.key)}" value="copy" ${action === 'copy' ? 'checked' : ''} />
+                <span>另存为副本</span>
+              </label>
             </div>
           </div>
         `;
@@ -2566,14 +2584,14 @@ function renderFullBackupPreview(result) {
       html += `</div></div>`;
     }
 
-    if (library.conflicts.length > 0) {
+    if (importLibrary.conflicts.length > 0) {
       html += `
         <div class="conflictGroup">
-          <div class="conflictGroupTitle">📚 曲库冲突 (${library.conflicts.length})</div>
+          <div class="conflictGroupTitle">📚 曲库冲突 (${importLibrary.conflicts.length})</div>
           <div class="conflictGroupDesc muted small">同名的曲目资料</div>
           <div class="conflictList">
       `;
-      library.conflicts.forEach(c => {
+      importLibrary.conflicts.forEach(c => {
         const bi = c.backupItem;
         const li = c.localItem;
         const action = cfg.conflicts.library[c.key].action;
@@ -2622,14 +2640,14 @@ function renderFullBackupPreview(result) {
       html += `</div></div>`;
     }
 
-    if (views.conflicts.length > 0) {
+    if (importViews.conflicts.length > 0) {
       html += `
         <div class="conflictGroup">
-          <div class="conflictGroupTitle">👁 筛选视图冲突 (${views.conflicts.length})</div>
+          <div class="conflictGroupTitle">👁 筛选视图冲突 (${importViews.conflicts.length})</div>
           <div class="conflictGroupDesc muted small">同名的筛选视图</div>
           <div class="conflictList">
       `;
-      views.conflicts.forEach(c => {
+      importViews.conflicts.forEach(c => {
         const bv = c.backupView;
         const lv = c.localView;
         const action = cfg.conflicts.views[c.key].action;
@@ -2680,12 +2698,12 @@ function renderFullBackupPreview(result) {
     html += `</div>`;
   }
 
-  if (records.allErrors.length > 0) {
+  if (importRecords.allErrors.length > 0) {
     html += `
       <div class="importSection errors">
-        <h3>❌ 记录格式错误 (${records.invalidRecords.length})</h3>
+        <h3>❌ 记录格式错误 (${importRecords.invalidRecords.length})</h3>
         <ul class="errorList">
-          ${records.allErrors.map(e => `<li>${escapeHtml(e)}</li>`).join('')}
+          ${importRecords.allErrors.map(e => `<li>${escapeHtml(e)}</li>`).join('')}
         </ul>
       </div>
     `;
@@ -2999,6 +3017,11 @@ async function handleFullBackupImport() {
       const decision = cfg.conflicts.records[conflict.key];
       if (decision.action === 'overwrite') {
         newRecs.push(conflict.backupRecord);
+      } else if (decision.action === 'copy') {
+        newRecs.push({
+          ...conflict.backupRecord,
+          id: crypto.randomUUID()
+        });
       }
     }
 
