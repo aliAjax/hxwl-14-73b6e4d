@@ -4024,3 +4024,66 @@ td button { margin-left: 6px; background: #dff3ef; }
     width: 100%;
   }
 }
+
+.migrationToast {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 10000;
+  max-width: 420px;
+  padding: 16px 20px;
+  background: #ffffff;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.12);
+  font-size: 13px;
+  line-height: 1.5;
+  color: #172522;
+  transition: opacity 0.5s ease, transform 0.5s ease;
+}
+.migrationToastFadeOut {
+  opacity: 0;
+  transform: translateY(-10px);
+}
+.migrationToastTitle {
+  font-weight: 600;
+  font-size: 14px;
+  margin-bottom: 8px;
+}
+.migrationToastError {
+  color: #dc2626;
+}
+.migrationToastSubtitle {
+  font-size: 12px;
+  color: #60736f;
+  margin-bottom: 6px;
+}
+.migrationToastDetail {
+  padding: 4px 0;
+  border-bottom: 1px solid #f3f4f6;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.migrationToastDetail:last-child {
+  border-bottom: none;
+}
+.migrationToastRepair {
+  display: inline-block;
+  font-size: 11px;
+  color: #6b7280;
+  padding-left: 20px;
+}
+.migrationToastErrors {
+  margin-top: 8px;
+  padding: 8px;
+  background: #fef2f2;
+  border-radius: 4px;
+  font-size: 12px;
+  color: #dc2626;
+}
+.migrationToastSnapshot {
+  margin-top: 8px;
+  font-size: 11px;
+  color: #0891b2;
+}

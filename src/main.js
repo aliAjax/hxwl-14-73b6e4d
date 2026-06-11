@@ -72,6 +72,455 @@ const seed = [
 
 const historyKey = 'hxwl-14-music-practice-history';
 const metaKey = 'hxwl-14-music-practice-meta';
+const migrationMetaKey = 'hxwl-14-migration-meta';
+const snapshotKey = 'hxwl-14-migration-snapshot';
+
+const DataMigration = (() => {
+  const GLOBAL_SCHEMA_VERSION = 2;
+  const MAX_SNAPSHOTS = 5;
+
+  const DATA_TYPES = {
+    records: { key, type: 'array', label: '练习记录' },
+    library: { key: libraryKey, type: 'array', label: '曲库' },
+    plan: { key: planKey, type: 'object', label: '练习计划' },
+    goals: { key: goalKey, type: 'array', label: '练习目标' },
+    session: { key: sessionKey, type: 'object', label: '练习会话' },
+    committedSessions: { key: committedSessionsKey, type: 'array', label: '已提交会话' },
+    filters: { key: filtersKey, type: 'object', label: '筛选条件' },
+    views: { key: viewsKey, type: 'array', label: '筛选视图' },
+    currentView: { key: currentViewKey, type: 'string', label: '当前视图' },
+    history: { key: historyKey, type: 'array', label: '版本历史' },
+    versionMeta: { key: metaKey, type: 'object', label: '版本元数据' }
+  };
+
+  const defaultFilters = {
+    instrument: '',
+    piece: '',
+    dateStart: '',
+    dateEnd: '',
+    bpmMin: '',
+    bpmMax: '',
+    mistakesMin: '',
+    mistakesMax: '',
+    noteKeyword: ''
+  };
+
+  function safeParse(raw, fallback) {
+    try {
+      const parsed = JSON.parse(raw);
+      return parsed !== null ? parsed : fallback;
+    } catch {
+      return null;
+    }
+  }
+
+  function loadMigrationMeta() {
+    const raw = localStorage.getItem(migrationMetaKey);
+    const parsed = safeParse(raw, null);
+    if (parsed && typeof parsed === 'object' && typeof parsed.schemaVersion === 'number') {
+      return parsed;
+    }
+    return { schemaVersion: 0, dataVersions: {}, lastMigrationAt: null };
+  }
+
+  function saveMigrationMeta(meta) {
+    localStorage.setItem(migrationMetaKey, JSON.stringify(meta));
+  }
+
+  function createSnapshot() {
+    const snapshot = {
+      id: crypto.randomUUID(),
+      createdAt: new Date().toISOString(),
+      schemaVersion: loadMigrationMeta().schemaVersion,
+      data: {}
+    };
+    for (const [name, info] of Object.entries(DATA_TYPES)) {
+      const raw = localStorage.getItem(info.key);
+      snapshot.data[name] = raw;
+    }
+    const existingRaw = localStorage.getItem(snapshotKey);
+    const existing = safeParse(existingRaw, []);
+    const snapshots = Array.isArray(existing) ? existing : [];
+    snapshots.push(snapshot);
+    while (snapshots.length > MAX_SNAPSHOTS) {
+      snapshots.shift();
+    }
+    localStorage.setItem(snapshotKey, JSON.stringify(snapshots));
+    return snapshot;
+  }
+
+  function restoreSnapshot(snapshotId) {
+    const existingRaw = localStorage.getItem(snapshotKey);
+    const existing = safeParse(existingRaw, []);
+    const snapshots = Array.isArray(existing) ? existing : [];
+    const snapshot = snapshots.find(s => s.id === snapshotId);
+    if (!snapshot) return { success: false, error: '快照不存在' };
+    for (const [name, info] of Object.entries(DATA_TYPES)) {
+      const value = snapshot.data[name];
+      if (value !== undefined && value !== null) {
+        localStorage.setItem(info.key, value);
+      } else {
+        localStorage.removeItem(info.key);
+      }
+    }
+    saveMigrationMeta({ schemaVersion: snapshot.schemaVersion, dataVersions: {}, lastMigrationAt: snapshot.createdAt });
+    return { success: true };
+  }
+
+  function getLatestSnapshotId() {
+    const existingRaw = localStorage.getItem(snapshotKey);
+    const existing = safeParse(existingRaw, []);
+    const snapshots = Array.isArray(existing) ? existing : [];
+    if (snapshots.length === 0) return null;
+    return snapshots[snapshots.length - 1].id;
+  }
+
+  function detectCorruption(name, info) {
+    const raw = localStorage.getItem(info.key);
+    if (raw === null || raw === '') return { status: 'missing' };
+    const parsed = safeParse(raw, null);
+    if (parsed === null) return { status: 'corrupted', raw };
+    if (info.type === 'array' && !Array.isArray(parsed)) return { status: 'type_mismatch', expected: 'array', actual: typeof parsed };
+    if (info.type === 'object' && (Array.isArray(parsed) || typeof parsed !== 'object')) return { status: 'type_mismatch', expected: 'object', actual: Array.isArray(parsed) ? 'array' : typeof parsed };
+    return { status: 'ok', parsed };
+  }
+
+  function repairRecords(parsed) {
+    if (!Array.isArray(parsed)) return { data: [], repairs: ['数据不是数组，已重置为空数组'] };
+    const repairs = [];
+    const repaired = parsed.filter((r, i) => {
+      if (!r || typeof r !== 'object') { repairs.push(`记录 #${i + 1}: 非对象类型，已移除`); return false; }
+      if (!r.id || typeof r.id !== 'string') { r.id = crypto.randomUUID(); repairs.push(`记录 #${i + 1}: 缺少有效id，已生成新id`); }
+      if (!r.piece) { repairs.push(`记录 ${r.id.slice(0, 8)}: 缺少曲目名称`); }
+      if (!r.date) { r.date = getToday(); repairs.push(`记录 ${r.id.slice(0, 8)}: 缺少日期，设为今天`); }
+      if (r.bpm === undefined || r.bpm === null) { r.bpm = 0; repairs.push(`记录 ${r.id.slice(0, 8)}: 缺少BPM，设为0`); }
+      if (r.minutes === undefined || r.minutes === null) { r.minutes = 0; repairs.push(`记录 ${r.id.slice(0, 8)}: 缺少时长，设为0`); }
+      if (r.mistakes === undefined || r.mistakes === null) { r.mistakes = 0; repairs.push(`记录 ${r.id.slice(0, 8)}: 缺少错误数，设为0`); }
+      if (!Array.isArray(r.sections)) { r.sections = []; repairs.push(`记录 ${r.id.slice(0, 8)}: sections不是数组，已初始化`); }
+      return true;
+    });
+    return { data: repaired, repairs };
+  }
+
+  function repairLibrary(parsed) {
+    if (!Array.isArray(parsed)) return { data: JSON.parse(JSON.stringify(librarySeed)), repairs: ['曲库数据不是数组，已重置为种子数据'] };
+    const repairs = [];
+    const repaired = parsed.filter((item, i) => {
+      if (!item || typeof item !== 'object') { repairs.push(`曲库项 #${i + 1}: 非对象类型，已移除`); return false; }
+      if (!item.id || typeof item.id !== 'string') { item.id = crypto.randomUUID(); repairs.push(`曲库项 #${i + 1}: 缺少有效id，已生成新id`); }
+      if (!item.name) { repairs.push(`曲库项 ${item.id.slice(0, 8)}: 缺少曲目名称`); }
+      if (!Array.isArray(item.defaultSections)) { item.defaultSections = []; repairs.push(`曲库项 ${item.id.slice(0, 8)}: defaultSections不是数组，已初始化`); }
+      if (!Array.isArray(item.referenceLinks)) { item.referenceLinks = []; repairs.push(`曲库项 ${item.id.slice(0, 8)}: referenceLinks不是数组，已初始化`); }
+      if (!item.createdAt) { item.createdAt = new Date().toISOString(); repairs.push(`曲库项 ${item.id.slice(0, 8)}: 缺少创建时间，已补充`); }
+      return true;
+    });
+    return { data: repaired, repairs };
+  }
+
+  function repairPlan(parsed) {
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return { data: {}, repairs: ['计划数据不是对象，已重置为空'] };
+    const repairs = [];
+    const repaired = {};
+    for (const [dateKey, tasks] of Object.entries(parsed)) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(dateKey)) { repairs.push(`计划日期键 "${dateKey}" 格式无效，已跳过`); continue; }
+      if (!Array.isArray(tasks)) { repairs.push(`计划 ${dateKey}: 任务不是数组，已跳过`); continue; }
+      repaired[dateKey] = tasks.filter((t, i) => {
+        if (!t || typeof t !== 'object') { repairs.push(`计划 ${dateKey} 任务 #${i + 1}: 非对象类型，已移除`); return false; }
+        if (!t.id) { t.id = crypto.randomUUID(); repairs.push(`计划 ${dateKey} 任务 #${i + 1}: 缺少id，已生成`); }
+        if (!t.piece) { repairs.push(`计划 ${dateKey} 任务 ${t.id.slice(0, 8)}: 缺少曲目名称`); }
+        return true;
+      });
+    }
+    return { data: repaired, repairs };
+  }
+
+  function repairGoals(parsed) {
+    const goalSeedData = [
+      { id: crypto.randomUUID(), piece: 'Blue Bossa', targetBpm: 120, startBpm: 86, targetDate: '2026-06-30', weeklyMinutes: 180, createdAt: '2026-06-01', achieved: false, achievedAt: null },
+      { id: crypto.randomUUID(), piece: 'Autumn Leaves', targetBpm: 100, startBpm: 72, targetDate: '2026-06-20', weeklyMinutes: 150, createdAt: '2026-06-01', achieved: false, achievedAt: null }
+    ];
+    if (!Array.isArray(parsed)) return { data: goalSeedData, repairs: ['目标数据不是数组，已重置为种子数据'] };
+    const repairs = [];
+    const repaired = parsed.filter((g, i) => {
+      if (!g || typeof g !== 'object') { repairs.push(`目标 #${i + 1}: 非对象类型，已移除`); return false; }
+      if (!g.id || typeof g.id !== 'string') { g.id = crypto.randomUUID(); repairs.push(`目标 #${i + 1}: 缺少有效id，已生成新id`); }
+      if (!g.piece) { repairs.push(`目标 ${g.id.slice(0, 8)}: 缺少曲目名称`); }
+      if (g.targetBpm === undefined || g.targetBpm === null) { g.targetBpm = 0; repairs.push(`目标 ${g.id.slice(0, 8)}: 缺少目标BPM，设为0`); }
+      if (g.achieved === undefined) { g.achieved = false; repairs.push(`目标 ${g.id.slice(0, 8)}: 缺少达成状态，设为false`); }
+      if (!g.createdAt) { g.createdAt = new Date().toISOString(); repairs.push(`目标 ${g.id.slice(0, 8)}: 缺少创建时间，已补充`); }
+      return true;
+    });
+    return { data: repaired, repairs };
+  }
+
+  function repairSession(parsed) {
+    const defaultSession = { id: null, status: 'idle', startTime: null, accumulatedMs: 0, instrument: '', piece: '', targetBpm: '', note: '', sections: [], createdAt: null };
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return { data: defaultSession, repairs: ['会话数据不是对象，已重置为默认值'] };
+    const repairs = [];
+    const repaired = { ...defaultSession, ...parsed };
+    if (!['idle', 'running', 'paused'].includes(repaired.status)) { repaired.status = 'idle'; repairs.push('会话状态无效，已重置为idle'); }
+    if (!Array.isArray(repaired.sections)) { repaired.sections = []; repairs.push('会话sections不是数组，已初始化'); }
+    if (typeof repaired.accumulatedMs !== 'number') { repaired.accumulatedMs = 0; repairs.push('会话累计时间无效，已重置为0'); }
+    return { data: repaired, repairs };
+  }
+
+  function repairCommittedSessions(parsed) {
+    if (!Array.isArray(parsed)) return { data: [], repairs: ['已提交会话不是数组，已重置为空'] };
+    const repairs = [];
+    const repaired = parsed.filter((id, i) => {
+      if (typeof id !== 'string') { repairs.push(`已提交会话 #${i + 1}: 不是字符串，已移除`); return false; }
+      return true;
+    });
+    return { data: repaired, repairs };
+  }
+
+  function repairFilters(parsed) {
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return { data: { ...defaultFilters }, repairs: ['筛选条件不是对象，已重置为默认值'] };
+    const repairs = [];
+    const repaired = { ...defaultFilters };
+    for (const [k, v] of Object.entries(defaultFilters)) {
+      if (parsed[k] !== undefined) { repaired[k] = parsed[k]; }
+      else { repairs.push(`筛选条件缺少字段 "${k}"，已补充默认值`); }
+    }
+    return { data: repaired, repairs };
+  }
+
+  function repairViews(parsed) {
+    if (!Array.isArray(parsed)) return { data: [], repairs: ['视图数据不是数组，已重置为空'] };
+    const repairs = [];
+    const repaired = parsed.filter((v, i) => {
+      if (!v || typeof v !== 'object') { repairs.push(`视图 #${i + 1}: 非对象类型，已移除`); return false; }
+      if (!v.id || typeof v.id !== 'string') { v.id = crypto.randomUUID(); repairs.push(`视图 #${i + 1}: 缺少有效id，已生成新id`); }
+      if (!v.name) { v.name = `视图 ${i + 1}`; repairs.push(`视图 ${v.id.slice(0, 8)}: 缺少名称，已生成`); }
+      if (!v.filters || typeof v.filters !== 'object') { v.filters = { ...defaultFilters }; repairs.push(`视图 ${v.id.slice(0, 8)}: 筛选条件无效，已重置`); }
+      if (!v.createdAt) { v.createdAt = new Date().toISOString(); repairs.push(`视图 ${v.id.slice(0, 8)}: 缺少创建时间，已补充`); }
+      return true;
+    });
+    return { data: repaired, repairs };
+  }
+
+  function repairCurrentView(parsed) {
+    if (typeof parsed !== 'string') return { data: '', repairs: ['当前视图ID不是字符串，已重置为空'] };
+    return { data: parsed, repairs: [] };
+  }
+
+  function repairHistory(parsed) {
+    if (!Array.isArray(parsed)) return { data: [], repairs: ['版本历史不是数组，已重置为空'] };
+    const repairs = [];
+    const repaired = parsed.filter((h, i) => {
+      if (!h || typeof h !== 'object') { repairs.push(`历史 #${i + 1}: 非对象类型，已移除`); return false; }
+      if (!h.id) { h.id = crypto.randomUUID(); repairs.push(`历史 #${i + 1}: 缺少id，已生成`); }
+      if (typeof h.version !== 'number') { h.version = 0; repairs.push(`历史 ${h.id.slice(0, 8)}: version无效，设为0`); }
+      return true;
+    });
+    return { data: repaired, repairs: [] };
+  }
+
+  function repairVersionMeta(parsed) {
+    const defaultMeta = { schemaVersion: 0, currentVersion: 0 };
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return { data: defaultMeta, repairs: ['版本元数据不是对象，已重置'] };
+    const repairs = [];
+    const repaired = { ...defaultMeta };
+    if (typeof parsed.schemaVersion === 'number') { repaired.schemaVersion = parsed.schemaVersion; }
+    else { repairs.push('schemaVersion无效，已设为0'); }
+    if (typeof parsed.currentVersion === 'number') { repaired.currentVersion = parsed.currentVersion; }
+    else { repaired.currentVersion = 0; repairs.push('currentVersion无效，已设为0'); }
+    return { data: repaired, repairs };
+  }
+
+  const REPAIR_FNS = {
+    records: repairRecords,
+    library: repairLibrary,
+    plan: repairPlan,
+    goals: repairGoals,
+    session: repairSession,
+    committedSessions: repairCommittedSessions,
+    filters: repairFilters,
+    views: repairViews,
+    currentView: repairCurrentView,
+    history: repairHistory,
+    versionMeta: repairVersionMeta
+  };
+
+  function runMigrationChain(name, parsed, fromVersion) {
+    const repairs = [];
+    let data = parsed;
+
+    if (fromVersion < 1) {
+      const repairResult = REPAIR_FNS[name](data);
+      data = repairResult.data;
+      repairs.push(...repairResult.repairs);
+    }
+
+    if (fromVersion < 2) {
+      if (name === 'records' && Array.isArray(data)) {
+        data = data.map(r => ({
+          ...r,
+          _version: r._version || 1,
+          _updatedAt: r._updatedAt || new Date().toISOString()
+        }));
+        if (!data.every(r => r._version !== undefined)) {
+          repairs.push('练习记录: 为无版本标记的记录补充版本信息');
+        }
+      }
+      if (name === 'library' && Array.isArray(data) && data.length === 0) {
+        data = JSON.parse(JSON.stringify(librarySeed));
+        repairs.push('曲库为空，已填充种子数据');
+      }
+    }
+
+    return { data, repairs };
+  }
+
+  function migrate() {
+    const meta = loadMigrationMeta();
+    const report = {
+      migrated: false,
+      repaired: false,
+      hadCorruption: false,
+      details: [],
+      errors: [],
+      snapshotId: null
+    };
+
+    const needsMigration = meta.schemaVersion < GLOBAL_SCHEMA_VERSION;
+    const isFreshInstall = meta.schemaVersion === 0 && !localStorage.getItem(key) && !localStorage.getItem(libraryKey);
+    let anyCorruption = false;
+    let anyRepair = false;
+
+    if (isFreshInstall) {
+      saveMigrationMeta({
+        schemaVersion: GLOBAL_SCHEMA_VERSION,
+        dataVersions: {},
+        lastMigrationAt: new Date().toISOString()
+      });
+      return report;
+    }
+
+    for (const [name, info] of Object.entries(DATA_TYPES)) {
+      const detection = detectCorruption(name, info);
+      if (detection.status !== 'ok') {
+        anyCorruption = true;
+        report.hadCorruption = true;
+        const detail = { type: name, label: info.label, status: detection.status, repairs: [] };
+        if (detection.status === 'missing') {
+          detail.repairs.push('数据缺失，将初始化默认值');
+          anyRepair = true;
+          report.details.push(detail);
+          continue;
+        }
+        if (detection.status === 'corrupted') {
+          detail.repairs.push('JSON损坏无法解析，将初始化默认值');
+          anyRepair = true;
+          report.details.push(detail);
+          continue;
+        }
+        if (detection.status === 'type_mismatch') {
+          const result = runMigrationChain(name, detection.parsed, 0);
+          detail.repairs.push(...result.repairs);
+          detail.repairs.push(`类型不匹配(期望${detection.expected}，实际${detection.actual})，已修复`);
+          anyRepair = true;
+          report.details.push(detail);
+          continue;
+        }
+      }
+    }
+
+    if (needsMigration || anyCorruption || anyRepair) {
+      let snapshotId = null;
+      try {
+        snapshotId = createSnapshot().id;
+        report.snapshotId = snapshotId;
+      } catch (e) {
+        report.errors.push(`创建快照失败: ${e.message}`);
+      }
+
+      try {
+        for (const [name, info] of Object.entries(DATA_TYPES)) {
+          const dataVersion = meta.dataVersions?.[name] || 0;
+          const raw = localStorage.getItem(info.key);
+
+          if (raw === null || raw === '') {
+            const result = runMigrationChain(name, null, 0);
+            if (result.data !== null && result.data !== undefined) {
+              localStorage.setItem(info.key, JSON.stringify(result.data));
+              const existing = report.details.find(d => d.type === name);
+              if (existing) {
+                existing.repairs.push(...result.repairs);
+              } else if (result.repairs.length > 0) {
+                report.details.push({ type: name, label: info.label, status: 'repaired', repairs: result.repairs });
+              }
+            }
+            continue;
+          }
+
+          const parsed = safeParse(raw, null);
+          if (parsed !== null) {
+            const result = runMigrationChain(name, parsed, dataVersion);
+            if (result.repairs.length > 0) {
+              anyRepair = true;
+              const existing = report.details.find(d => d.type === name);
+              if (existing) {
+                existing.repairs.push(...result.repairs);
+              } else {
+                report.details.push({ type: name, label: info.label, status: 'repaired', repairs: result.repairs });
+              }
+            }
+            localStorage.setItem(info.key, JSON.stringify(result.data));
+          }
+        }
+
+        const newMeta = {
+          schemaVersion: GLOBAL_SCHEMA_VERSION,
+          dataVersions: {},
+          lastMigrationAt: new Date().toISOString()
+        };
+        for (const name of Object.keys(DATA_TYPES)) {
+          newMeta.dataVersions[name] = GLOBAL_SCHEMA_VERSION;
+        }
+        saveMigrationMeta(newMeta);
+        report.migrated = needsMigration;
+        report.repaired = anyRepair;
+      } catch (e) {
+        report.errors.push(`迁移过程出错: ${e.message}`);
+        if (snapshotId) {
+          try {
+            restoreSnapshot(snapshotId);
+            report.errors.push('已自动回滚到迁移前状态');
+          } catch (restoreErr) {
+            report.errors.push(`回滚失败: ${restoreErr.message}`);
+          }
+        }
+      }
+    }
+
+    return report;
+  }
+
+  function getSnapshots() {
+    const raw = localStorage.getItem(snapshotKey);
+    const parsed = safeParse(raw, []);
+    return Array.isArray(parsed) ? parsed : [];
+  }
+
+  function manualRestore(snapshotId) {
+    return restoreSnapshot(snapshotId);
+  }
+
+  function getGlobalSchemaVersion() {
+    return GLOBAL_SCHEMA_VERSION;
+  }
+
+  return {
+    migrate,
+    getSnapshots,
+    manualRestore,
+    getLatestSnapshotId,
+    getGlobalSchemaVersion,
+    loadMigrationMeta,
+    DATA_TYPES
+  };
+})();
 
 const VersionManager = (() => {
   const SCHEMA_VERSION = 1;
@@ -488,6 +937,8 @@ const libraryInstruments = ['电吉他', '木吉他', '贝斯', '键盘', '钢�
 function refreshLibrary() {
   library = LibraryManager.getAll();
 }
+
+const migrationReport = DataMigration.migrate();
 
 const vmInitResult = VersionManager.init();
 let records = vmInitResult.records;
@@ -1284,6 +1735,7 @@ function calculateGoalProgress(goal) {
 }
 
 document.querySelector('#app').innerHTML = `
+  <div id="migrationToast" class="migrationToast" hidden></div>
   <main class="shell">
     <header class="hero">
       <div>
@@ -6296,5 +6748,40 @@ const ReportManager = (() => {
 
 let reportRange = 'week';
 
+function showMigrationToast(report) {
+  if (!report.migrated && !report.repaired && !report.hadCorruption && report.errors.length === 0) return;
+  const toast = document.querySelector('#migrationToast');
+  if (!toast) return;
+
+  const parts = [];
+  if (report.migrated) parts.push(`<div class="migrationToastTitle">🔄 数据迁移完成 (Schema v${DataMigration.getGlobalSchemaVersion()})</div>`);
+  if (report.repaired) parts.push(`<div class="migrationToastSubtitle">修复了以下数据问题：</div>`);
+  if (report.errors.length > 0 && !report.migrated) parts.push(`<div class="migrationToastTitle migrationToastError">⚠️ 数据迁移异常</div>`);
+
+  const detailItems = report.details.map(d => {
+    const icon = d.status === 'corrupted' ? '❌' : d.status === 'type_mismatch' ? '⚠️' : d.status === 'missing' ? '📭' : '🔧';
+    const repairText = d.repairs.length > 0 ? d.repairs.map(r => `<span class="migrationToastRepair">${r}</span>`).join('') : '';
+    return `<div class="migrationToastDetail"><span>${icon} ${d.label}</span>${repairText}</div>`;
+  });
+  parts.push(...detailItems);
+
+  if (report.errors.length > 0) {
+    parts.push(`<div class="migrationToastErrors">${report.errors.map(e => `⚠️ ${e}`).join('<br>')}</div>`);
+  }
+
+  if (report.snapshotId) {
+    parts.push(`<div class="migrationToastSnapshot">恢复快照已保存 (ID: ${report.snapshotId.slice(0, 8)}...)</div>`);
+  }
+
+  toast.innerHTML = parts.join('');
+  toast.hidden = false;
+
+  setTimeout(() => {
+    toast.classList.add('migrationToastFadeOut');
+    setTimeout(() => { toast.hidden = true; toast.classList.remove('migrationToastFadeOut'); }, 600);
+  }, 8000);
+}
+
 initSession();
 render();
+showMigrationToast(migrationReport);
