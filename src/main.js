@@ -579,7 +579,10 @@ function applyFilters(recordsToFilter) {
     if (filters.mistakesMax && record.mistakes > Number(filters.mistakesMax)) return false;
     if (filters.noteKeyword) {
       const note = record.note || '';
-      if (!note.includes(filters.noteKeyword)) return false;
+      const sections = getSections(record);
+      const matchedInNote = note.includes(filters.noteKeyword);
+      const matchedInSections = sections.some(s => s.name && s.name.includes(filters.noteKeyword));
+      if (!matchedInNote && !matchedInSections) return false;
     }
     return true;
   });
@@ -1645,6 +1648,14 @@ document.querySelector('#app').innerHTML = `
         <input type="hidden" name="editingId" value="" />
       </form>
       <div id="libraryList" class="libraryList"></div>
+    </section>
+
+    <section class="panel segmentTrendPanel">
+      <div class="panelHead">
+        <h2>📊 分段趋势面板</h2>
+        <span class="muted" id="segmentTrendMeta"></span>
+      </div>
+      <div id="segmentTrendContent" class="segmentTrendContent"></div>
     </section>
 
     <section class="panel">
@@ -3438,11 +3449,19 @@ function render() {
   drawLine('#mistakeChart', filtered.map((record) => ({ label: record.date.slice(5), value: record.mistakes })), '次', '#dc2626');
 
   const filterBadge = document.querySelector('#filterBadge');
-  if (archiveFilter) {
-    filterBadge.innerHTML = `<span class="filterTag">筛选: ${escapeHtml(archiveFilter)} <button id="clearFilter" class="clearFilter">×</button></span>`;
+  const hasArchiveFilter = !!archiveFilter;
+  const hasSectionFilter = !!filters.noteKeyword;
+  if (hasArchiveFilter || hasSectionFilter) {
+    const filterParts = [];
+    if (hasArchiveFilter) filterParts.push(`🎵 ${escapeHtml(archiveFilter)}`);
+    if (hasSectionFilter) filterParts.push(`📂 片段: ${escapeHtml(filters.noteKeyword)}`);
+    filterBadge.innerHTML = `<span class="filterTag">筛选: ${filterParts.join(' · ')} <button id="clearFilter" class="clearFilter">×</button></span>`;
     document.querySelector('#clearFilter').addEventListener('click', () => {
       archiveFilter = '';
       pieceFilter.value = '';
+      filters.piece = '';
+      filters.noteKeyword = '';
+      saveFilters();
       render();
     });
   } else {
@@ -3526,6 +3545,7 @@ function render() {
     }
   }));
   renderPlan();
+  renderSegmentTrends();
   renderArchive();
   renderGoals();
   renderGoalDashboard();
@@ -3788,6 +3808,248 @@ function drawBarsInline(data, unit, color) {
 <text x="${x + barWidth / 2}" y="${y - 6}" fill="#172522" font-size="11" font-weight="600" text-anchor="middle">${item.value}${unit}</text>
 <text x="${x + barWidth / 2}" y="150" fill="#60736f" font-size="11" text-anchor="middle">${item.label}</text>`;
   }).join('')}</svg>`;
+}
+
+function computeSegmentTrends() {
+  const ABSENCE_DAYS = 14;
+  const pieceMap = new Map();
+
+  records.forEach(record => {
+    const sections = getSections(record);
+    if (!sections.length) return;
+    if (!pieceMap.has(record.piece)) {
+      pieceMap.set(record.piece, {
+        piece: record.piece,
+        instrument: record.instrument,
+        sectionMap: new Map(),
+        recordDates: []
+      });
+    }
+    const piece = pieceMap.get(record.piece);
+    piece.recordDates.push(record.date);
+
+    sections.forEach(section => {
+      if (!piece.sectionMap.has(section.name)) {
+        piece.sectionMap.set(section.name, {
+          name: section.name,
+          piece: record.piece,
+          bpmHistory: [],
+          mistakesHistory: [],
+          masteryHistory: [],
+          recordIds: []
+        });
+      }
+      const seg = piece.sectionMap.get(section.name);
+      seg.bpmHistory.push({ date: record.date, value: section.bpm });
+      seg.mistakesHistory.push({ date: record.date, value: section.mistakes });
+      seg.masteryHistory.push({ date: record.date, value: section.mastery });
+      seg.recordIds.push(record.id);
+    });
+  });
+
+  const today = getToday();
+  const results = [];
+
+  pieceMap.forEach(piece => {
+    const segments = [];
+    piece.sectionMap.forEach(seg => {
+      const sortedBpm = [...seg.bpmHistory].sort((a, b) => a.date.localeCompare(b.date));
+      const sortedMistakes = [...seg.mistakesHistory].sort((a, b) => a.date.localeCompare(b.date));
+      const sortedMastery = [...seg.masteryHistory].sort((a, b) => a.date.localeCompare(b.date));
+
+      const maxBpm = sortedBpm.length ? Math.max(...sortedBpm.map(h => h.value)) : 0;
+      const latestBpm = sortedBpm.length ? sortedBpm[sortedBpm.length - 1].value : 0;
+      const latestMastery = sortedMastery.length ? sortedMastery[sortedMastery.length - 1].value : 0;
+      const latestMistakes = sortedMistakes.length ? sortedMistakes[sortedMistakes.length - 1].value : 0;
+
+      let masteryTrend = 0;
+      if (sortedMastery.length >= 2) {
+        masteryTrend = sortedMastery[sortedMastery.length - 1].value - sortedMastery[sortedMastery.length - 2].value;
+      }
+      let mistakesTrend = 0;
+      if (sortedMistakes.length >= 2) {
+        mistakesTrend = sortedMistakes[sortedMistakes.length - 1].value - sortedMistakes[sortedMistakes.length - 2].value;
+      }
+      let bpmTrend = 0;
+      if (sortedBpm.length >= 2) {
+        bpmTrend = sortedBpm[sortedBpm.length - 1].value - sortedBpm[sortedBpm.length - 2].value;
+      }
+
+      const lastDate = sortedBpm.length ? sortedBpm[sortedBpm.length - 1].date : '';
+      const daysSince = lastDate ? Math.round((new Date(today) - new Date(lastDate)) / (1000 * 60 * 60 * 24)) : 999;
+      const longAbsent = daysSince >= ABSENCE_DAYS;
+      const regressing = masteryTrend < 0 || mistakesTrend > 0;
+
+      segments.push({
+        name: seg.name,
+        piece: seg.piece,
+        bpmHistory: sortedBpm,
+        mistakesHistory: sortedMistakes,
+        masteryHistory: sortedMastery,
+        maxBpm,
+        latestBpm,
+        latestMastery,
+        latestMistakes,
+        masteryTrend,
+        mistakesTrend,
+        bpmTrend,
+        lastDate,
+        daysSince,
+        longAbsent,
+        regressing,
+        practiceCount: seg.bpmHistory.length,
+        recordIds: seg.recordIds,
+        alertLevel: longAbsent && regressing ? 'critical' : regressing ? 'warning' : longAbsent ? 'absent' : 'normal'
+      });
+    });
+
+    segments.sort((a, b) => {
+      const alertOrder = { critical: 0, warning: 1, absent: 2, normal: 3 };
+      if (alertOrder[a.alertLevel] !== alertOrder[b.alertLevel]) return alertOrder[a.alertLevel] - alertOrder[b.alertLevel];
+      return b.practiceCount - a.practiceCount;
+    });
+
+    results.push({
+      piece: piece.piece,
+      instrument: piece.instrument,
+      segments,
+      hasAlert: segments.some(s => s.alertLevel !== 'normal'),
+      alertCount: segments.filter(s => s.alertLevel !== 'normal').length
+    });
+  });
+
+  results.sort((a, b) => {
+    if (a.hasAlert !== b.hasAlert) return a.hasAlert ? -1 : 1;
+    if (a.alertCount !== b.alertCount) return b.alertCount - a.alertCount;
+    return 0;
+  });
+
+  return results;
+}
+
+function renderSegmentTrends() {
+  const data = computeSegmentTrends();
+  const metaEl = document.querySelector('#segmentTrendMeta');
+  const contentEl = document.querySelector('#segmentTrendContent');
+
+  const totalSegments = data.reduce((sum, p) => sum + p.segments.length, 0);
+  const alertSegments = data.reduce((sum, p) => sum + p.segments.filter(s => s.alertLevel !== 'normal').length, 0);
+  const piecesWithSections = data.filter(p => p.segments.length > 0);
+
+  if (metaEl) {
+    metaEl.textContent = piecesWithSections.length
+      ? `${piecesWithSections.length} 首曲目 · ${totalSegments} 个片段${alertSegments ? ` · ${alertSegments} 个需关注` : ''}`
+      : '';
+  }
+
+  if (!piecesWithSections.length) {
+    contentEl.innerHTML = `
+      <div class="segmentTrendEmpty">
+        <span class="segmentTrendEmptyIcon">📊</span>
+        <h3 class="segmentTrendEmptyTitle">暂无分段练习数据</h3>
+        <p class="segmentTrendEmptyDesc">添加练习记录时拆分片段（前奏、主歌、副歌、Solo等），即可在此查看各片段的趋势变化。</p>
+      </div>
+    `;
+    return;
+  }
+
+  contentEl.innerHTML = piecesWithSections.map(piece => {
+    const hasAlert = piece.hasAlert;
+    return `
+      <div class="segmentTrendPiece ${hasAlert ? 'hasAlert' : ''}">
+        <div class="segmentTrendPieceHead">
+          <div class="segmentTrendPieceInfo">
+            <h3 class="segmentTrendPieceTitle">${escapeHtml(piece.piece)}</h3>
+            <span class="segmentTrendPieceMeta">${escapeHtml(piece.instrument)} · ${piece.segments.length} 个片段</span>
+          </div>
+          ${hasAlert ? `<span class="segmentTrendAlertBadge">${piece.alertCount} 个需关注</span>` : ''}
+        </div>
+        <div class="segmentTrendGrid">
+          ${piece.segments.map(seg => {
+            const bpmSvg = drawMiniTrendLine(seg.bpmHistory, '#0f766e');
+            const mistakesColor = seg.mistakesTrend > 0 ? '#dc2626' : seg.mistakesTrend < 0 ? '#059669' : '#60736f';
+            const mistakesSvg = drawMiniTrendLine(seg.mistakesHistory, mistakesColor);
+            const masterySvg = drawMiniTrendLine(seg.masteryHistory, getMasteryColor(seg.latestMastery));
+
+            const bpmTrendIcon = seg.bpmTrend > 0 ? '↑' : seg.bpmTrend < 0 ? '↓' : '→';
+            const bpmTrendColor = seg.bpmTrend > 0 ? '#059669' : seg.bpmTrend < 0 ? '#dc2626' : '#60736f';
+            const mistakesTrendIcon = seg.mistakesTrend > 0 ? '↑' : seg.mistakesTrend < 0 ? '↓' : '→';
+            const masteryTrendIcon = seg.masteryTrend > 0 ? '↑' : seg.masteryTrend < 0 ? '↓' : '→';
+            const masteryTrendColor = seg.masteryTrend > 0 ? '#059669' : seg.masteryTrend < 0 ? '#dc2626' : '#60736f';
+
+            return `
+              <div class="segmentTrendCard ${seg.alertLevel}" data-segment-piece="${escapeHtml(seg.piece)}" data-segment-name="${escapeHtml(seg.name)}">
+                <div class="segmentTrendCardHead">
+                  <strong class="segmentTrendCardName">${escapeHtml(seg.name)}</strong>
+                  <span class="masteryBadge" style="background: ${getMasteryColor(seg.latestMastery)}">${getMasteryLabel(seg.latestMastery)}</span>
+                </div>
+                ${seg.alertLevel !== 'normal' ? `
+                  <div class="segmentTrendAlert">
+                    ${seg.longAbsent ? `<span class="segmentTrendAlertTag absent">⏳ ${seg.daysSince}天未练</span>` : ''}
+                    ${seg.regressing ? `<span class="segmentTrendAlertTag regressing">⚠️ 最近退步</span>` : ''}
+                  </div>
+                ` : ''}
+                <div class="segmentTrendMetrics">
+                  <div class="segmentTrendMetric">
+                    <span class="segmentTrendMetricLabel">BPM</span>
+                    <span class="segmentTrendMetricValue">${seg.latestBpm}</span>
+                    <span class="segmentTrendMetricTrend" style="color:${bpmTrendColor}">${bpmTrendIcon}${seg.bpmTrend !== 0 ? Math.abs(seg.bpmTrend) : ''}</span>
+                    ${bpmSvg}
+                  </div>
+                  <div class="segmentTrendMetric">
+                    <span class="segmentTrendMetricLabel">错误</span>
+                    <span class="segmentTrendMetricValue">${seg.latestMistakes}</span>
+                    <span class="segmentTrendMetricTrend" style="color:${mistakesColor}">${mistakesTrendIcon}${seg.mistakesTrend !== 0 ? Math.abs(seg.mistakesTrend) : ''}</span>
+                    ${mistakesSvg}
+                  </div>
+                  <div class="segmentTrendMetric">
+                    <span class="segmentTrendMetricLabel">掌握度</span>
+                    <span class="segmentTrendMetricValue" style="color:${getMasteryColor(seg.latestMastery)}">${seg.latestMastery}/5</span>
+                    <span class="segmentTrendMetricTrend" style="color:${masteryTrendColor}">${masteryTrendIcon}${seg.masteryTrend !== 0 ? Math.abs(seg.masteryTrend) : ''}</span>
+                    ${masterySvg}
+                  </div>
+                </div>
+                <div class="segmentTrendCardFoot">
+                  <span class="muted">练习 ${seg.practiceCount} 次${seg.lastDate ? ' · 最近 ' + seg.lastDate : ''}</span>
+                  <button class="segmentTrendFilterBtn" data-filter-segment-piece="${escapeHtml(seg.piece)}" data-filter-segment-name="${escapeHtml(seg.name)}">筛选记录</button>
+                </div>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  function applySegmentFilter(pieceName, sectionName) {
+    archiveFilter = pieceName;
+    filters.piece = pieceName;
+    filters.noteKeyword = sectionName;
+    saveFilters();
+    render();
+    setTimeout(() => {
+      document.querySelector('#rows')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 50);
+  }
+
+  contentEl.querySelectorAll('.segmentTrendCard').forEach(card => {
+    card.style.cursor = 'pointer';
+    card.addEventListener('click', (e) => {
+      if (e.target.closest('.segmentTrendFilterBtn')) return;
+      const pieceName = card.dataset.segmentPiece;
+      const sectionName = card.dataset.segmentName;
+      if (pieceName) applySegmentFilter(pieceName, sectionName);
+    });
+  });
+
+  contentEl.querySelectorAll('[data-filter-segment-piece]').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const pieceName = btn.dataset.filterSegmentPiece;
+      const sectionName = btn.dataset.filterSegmentName;
+      applySegmentFilter(pieceName, sectionName);
+    });
+  });
 }
 
 function renderArchive() {

@@ -3331,3 +3331,269 @@ td button { margin-left: 6px; background: #dff3ef; }
     grid-template-columns: 1fr;
   }
 }
+
+.segmentTrendPanel {
+  margin-top: 18px;
+  background: linear-gradient(135deg, #f0fdfa 0%, #ecfeff 50%, #f0f9ff 100%);
+  border: 2px solid #5eead4;
+}
+
+.segmentTrendContent {
+  margin-top: 12px;
+  display: grid;
+  gap: 18px;
+}
+
+.segmentTrendEmpty {
+  text-align: center;
+  padding: 40px 20px;
+  background: white;
+  border-radius: 10px;
+  border: 1px dashed #c4d9d5;
+}
+
+.segmentTrendEmptyIcon {
+  font-size: 48px;
+  display: block;
+  margin-bottom: 12px;
+}
+
+.segmentTrendEmptyTitle {
+  font-size: 17px;
+  font-weight: 600;
+  color: #172522;
+  margin: 0 0 6px 0;
+}
+
+.segmentTrendEmptyDesc {
+  font-size: 14px;
+  color: #60736f;
+  margin: 0;
+  line-height: 1.6;
+}
+
+.segmentTrendPiece {
+  border: 1px solid #e4efec;
+  border-radius: 12px;
+  padding: 18px;
+  background: white;
+  transition: all 0.2s ease;
+}
+
+.segmentTrendPiece:hover {
+  border-color: #a7c9c2;
+  box-shadow: 0 4px 16px rgba(23, 61, 55, 0.06);
+}
+
+.segmentTrendPiece.hasAlert {
+  border-color: #f59e0b;
+  background: linear-gradient(135deg, #fffbeb 0%, white 40%);
+}
+
+.segmentTrendPieceHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.segmentTrendPieceTitle {
+  margin: 0 0 4px 0;
+  font-size: 18px;
+  font-weight: 700;
+  color: #172522;
+}
+
+.segmentTrendPieceMeta {
+  color: #60736f;
+  font-size: 13px;
+}
+
+.segmentTrendAlertBadge {
+  padding: 5px 14px;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 600;
+  background: #fef3c7;
+  color: #92400e;
+  border: 1px solid #fcd34d;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.segmentTrendGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 12px;
+}
+
+.segmentTrendCard {
+  border: 1px solid #e4efec;
+  border-radius: 10px;
+  padding: 14px;
+  background: #fbfefc;
+  transition: all 0.2s ease;
+  cursor: default;
+}
+
+.segmentTrendCard:hover {
+  border-color: #a7c9c2;
+  box-shadow: 0 4px 12px rgba(23, 61, 55, 0.08);
+  transform: translateY(-1px);
+}
+
+.segmentTrendCard.critical {
+  border-color: #dc2626;
+  background: #fef2f2;
+}
+
+.segmentTrendCard.warning {
+  border-color: #f59e0b;
+  background: #fffbeb;
+}
+
+.segmentTrendCard.absent {
+  border-color: #d97706;
+  background: #fefce8;
+}
+
+.segmentTrendCard.critical:hover {
+  border-color: #b91c1c;
+  box-shadow: 0 4px 16px rgba(220, 38, 38, 0.12);
+}
+
+.segmentTrendCard.warning:hover {
+  border-color: #d97706;
+  box-shadow: 0 4px 16px rgba(245, 158, 11, 0.15);
+}
+
+.segmentTrendCardHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+  gap: 8px;
+}
+
+.segmentTrendCardName {
+  font-size: 15px;
+  font-weight: 700;
+  color: #172522;
+}
+
+.segmentTrendAlert {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+.segmentTrendAlertTag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.segmentTrendAlertTag.absent {
+  background: #fef3c7;
+  color: #92400e;
+  border: 1px solid #fcd34d;
+}
+
+.segmentTrendAlertTag.regressing {
+  background: #fee2e2;
+  color: #991b1b;
+  border: 1px solid #fca5a5;
+}
+
+.segmentTrendMetrics {
+  display: grid;
+  gap: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed #e4efec;
+}
+
+.segmentTrendMetric {
+  display: grid;
+  grid-template-columns: 48px 32px 32px 1fr;
+  align-items: center;
+  gap: 6px;
+}
+
+.segmentTrendMetricLabel {
+  font-size: 12px;
+  color: #60736f;
+  font-weight: 500;
+}
+
+.segmentTrendMetricValue {
+  font-size: 15px;
+  font-weight: 700;
+  color: #172522;
+  text-align: right;
+}
+
+.segmentTrendMetricTrend {
+  font-size: 12px;
+  font-weight: 700;
+  text-align: center;
+}
+
+.segmentTrendMetric .miniTrendSvg {
+  min-height: 30px;
+  max-height: 30px;
+}
+
+.segmentTrendCardFoot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px dashed #e4efec;
+}
+
+.segmentTrendFilterBtn {
+  background: #0f766e;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  padding: 5px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.segmentTrendFilterBtn:hover {
+  background: #0d6b63;
+  transform: translateY(-1px);
+}
+
+@media (max-width: 900px) {
+  .segmentTrendGrid {
+    grid-template-columns: 1fr;
+  }
+  .segmentTrendPieceHead {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
+
+@media (max-width: 600px) {
+  .segmentTrendMetric {
+    grid-template-columns: 40px 28px 28px 1fr;
+  }
+  .segmentTrendMetricValue {
+    font-size: 13px;
+  }
+}
