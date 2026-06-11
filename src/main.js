@@ -357,7 +357,11 @@ const LibraryManager = (() => {
   }
 
   function getAll() {
-    return loadLibrary().sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+    return loadLibrary().sort((a, b) => {
+      const aTime = a.createdAt || a.updatedAt || '';
+      const bTime = b.createdAt || b.updatedAt || '';
+      return bTime.localeCompare(aTime);
+    });
   }
 
   function getById(id) {
@@ -478,6 +482,8 @@ const LibraryManager = (() => {
 })();
 
 let library = LibraryManager.getAll();
+let libraryFilter = { keyword: '', instrument: '', genre: '' };
+const libraryInstruments = ['电吉他', '木吉他', '贝斯', '键盘', '钢琴', '鼓', '小提琴', '声乐', '其他'];
 
 function refreshLibrary() {
   library = LibraryManager.getAll();
@@ -1589,6 +1595,14 @@ document.querySelector('#app').innerHTML = `
         <h2>📚 曲目资料库</h2>
         <span class="muted" id="libraryCount"></span>
       </div>
+      <div class="libraryFilterBar">
+        <input id="librarySearch" placeholder="搜索曲目名、乐器、风格..." />
+        <select id="libraryInstrumentFilter">
+          <option value="">全部乐器</option>
+          ${libraryInstruments.map(i => `<option value="${i}">${i}</option>`).join('')}
+        </select>
+        <input id="libraryGenreFilter" placeholder="按风格筛选" />
+      </div>
       <form id="libraryForm" class="libraryForm">
         <div class="pair">
           <input name="name" placeholder="曲目名称 *" required />
@@ -1768,6 +1782,18 @@ search.addEventListener('input', render);
 pieceFilter.addEventListener('change', () => {
   archiveFilter = '';
   render();
+});
+document.querySelector('#librarySearch').addEventListener('input', (e) => {
+  libraryFilter.keyword = e.target.value;
+  renderLibrary();
+});
+document.querySelector('#libraryInstrumentFilter').addEventListener('change', (e) => {
+  libraryFilter.instrument = e.target.value;
+  renderLibrary();
+});
+document.querySelector('#libraryGenreFilter').addEventListener('input', (e) => {
+  libraryFilter.genre = e.target.value;
+  renderLibrary();
 });
 document.querySelector('#sample').addEventListener('click', async () => {
   const confirmed = await showConfirm('重置数据', '确定要重置为示例数据吗？当前所有记录将被清除，此操作可通过历史版本回滚。');
@@ -4009,14 +4035,45 @@ function renderLibrary() {
   refreshLibrary();
   const countEl = document.querySelector('#libraryCount');
   const listEl = document.querySelector('#libraryList');
-  countEl.textContent = `共 ${library.length} 首曲目`;
+  const searchInput = document.querySelector('#librarySearch');
+  const instrumentSelect = document.querySelector('#libraryInstrumentFilter');
+  const genreInput = document.querySelector('#libraryGenreFilter');
+  if (searchInput) searchInput.value = libraryFilter.keyword;
+  if (instrumentSelect) instrumentSelect.value = libraryFilter.instrument;
+  if (genreInput) genreInput.value = libraryFilter.genre;
+
+  const keyword = libraryFilter.keyword.trim().toLowerCase();
+  const instrumentFilter = libraryFilter.instrument;
+  const genreFilter = libraryFilter.genre.trim().toLowerCase();
+
+  const filtered = library.filter(item => {
+    if (instrumentFilter && item.instrument !== instrumentFilter) return false;
+    if (genreFilter && !(item.genre || '').toLowerCase().includes(genreFilter)) return false;
+    if (keyword) {
+      const haystack = [item.name, item.instrument, item.genre, item.practiceNotes].join(' ').toLowerCase();
+      if (!haystack.includes(keyword)) return false;
+    }
+    return true;
+  });
+
+  const hasFilter = keyword || instrumentFilter || genreFilter;
+  if (hasFilter) {
+    countEl.textContent = `${filtered.length} / ${library.length} 首曲目`;
+  } else {
+    countEl.textContent = `共 ${library.length} 首曲目`;
+  }
 
   if (!library.length) {
     listEl.innerHTML = '<p class="empty">暂无曲目，添加第一首到资料库</p>';
     return;
   }
 
-  listEl.innerHTML = library.map((item) => `
+  if (!filtered.length) {
+    listEl.innerHTML = '<p class="empty">没有匹配的曲目，试试其他关键词</p>';
+    return;
+  }
+
+  listEl.innerHTML = filtered.map((item) => `
     <article class="libraryCard" data-id="${item.id}">
       <div class="libraryCardHead">
         <div>

@@ -2440,6 +2440,36 @@ td button { margin-left: 6px; background: #dff3ef; }
   border: 2px solid #c4b5fd;
 }
 
+.libraryFilterBar {
+  display: flex;
+  gap: 10px;
+  margin-top: 12px;
+  flex-wrap: wrap;
+}
+
+.libraryFilterBar input,
+.libraryFilterBar select {
+  flex: 1;
+  min-width: 140px;
+  padding: 8px 12px;
+  border: 1px solid #d8b4fe;
+  border-radius: 8px;
+  font-size: 13px;
+  background: white;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.libraryFilterBar input:focus,
+.libraryFilterBar select:focus {
+  border-color: #7c3aed;
+  box-shadow: 0 0 0 2px rgba(124, 58, 237, 0.15);
+}
+
+.libraryFilterBar input::placeholder {
+  color: #a78bfa;
+}
+
 .libraryForm {
   display: grid;
   gap: 12px;
