@@ -339,7 +339,7 @@ const LibraryManager = (() => {
   function loadLibrary() {
     try {
       const raw = JSON.parse(localStorage.getItem(libraryKey) || 'null');
-      if (raw && Array.isArray(raw) && raw.length > 0) {
+      if (Array.isArray(raw)) {
         return raw;
       }
       const seeded = JSON.parse(JSON.stringify(librarySeed));
@@ -2183,7 +2183,9 @@ function processFullBackupData(parsedData) {
 
   if (parsedData.records !== undefined && Array.isArray(parsedData.records)) {
     result.hasRecords = true;
-    result.records = processImportData(parsedData.records);
+    result.records = parsedData.records.length > 0
+      ? processImportData(parsedData.records)
+      : { validRecords: [], newRecords: [], duplicateRecords: [], invalidRecords: [], allErrors: [] };
   } else {
     result.records = { validRecords: [], newRecords: [], duplicateRecords: [], invalidRecords: [], allErrors: [] };
   }
