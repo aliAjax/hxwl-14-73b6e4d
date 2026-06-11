@@ -6,10 +6,14 @@
   "scripts": {
     "dev": "vite --host 127.0.0.1 --port 5114",
     "build": "vite build",
-    "preview": "vite preview --host 127.0.0.1 --port 5214"
+    "preview": "vite preview --host 127.0.0.1 --port 5214",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "vite": "^7.0.0"
   },
-  "devDependencies": {}
+  "devDependencies": {
+    "vitest": "^4.1.8"
+  }
 }
